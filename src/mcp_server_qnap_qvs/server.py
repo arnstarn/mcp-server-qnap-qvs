@@ -144,12 +144,28 @@ async def get_vm_states() -> str:
 async def get_vm_ips(vm_id: str) -> str:
     """Get the IP addresses assigned to a virtual machine.
 
+    Requires the QEMU guest agent to be installed and running inside the VM.
+    Install it with: sudo apt install qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent
+
     Args:
         vm_id: The VM identifier
     """
     try:
         client = await _get_client()
         result = await client.get_vm_ips(vm_id)
+        status = result.get("status", 0)
+        if status == 241:
+            return _json({
+                "error": "QEMU guest agent is not installed or not running in this VM.",
+                "hint": "Install it inside the VM: sudo apt install qemu-guest-agent "
+                "&& sudo systemctl enable --now qemu-guest-agent",
+                "status": status,
+            })
+        if status == 240:
+            return _json({
+                "error": "VM is not running. Start the VM first to retrieve IP addresses.",
+                "status": status,
+            })
         return _json(result)
     except QVSError as e:
         return _json({"error": str(e)})
@@ -603,7 +619,10 @@ async def get_overview() -> str:
                 "network": {
                     "adapters": adapters,
                     "ips": ips if ips else (
-                        "not running" if v.get("power_state") != "running" else "guest agent required"
+                        "VM is not running" if v.get("power_state") != "running"
+                        else "QEMU guest agent not installed — run: "
+                        "sudo apt install qemu-guest-agent && "
+                        "sudo systemctl enable --now qemu-guest-agent"
                     ),
                 },
             }

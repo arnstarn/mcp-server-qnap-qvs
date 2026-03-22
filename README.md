@@ -8,6 +8,28 @@ MCP server for [QNAP Virtualization Station (QVS)](https://www.qnap.com/en/softw
 
 > **Note:** This is not an official QNAP product. The QVS REST API is undocumented — this project is based on reverse-engineering the web UI and the [qnap-qvs-sdk-for-go](https://github.com/tmeckel/qnap-qvs-sdk-for-go) project.
 
+## Prerequisites
+
+Before you start, you need:
+
+1. **QNAP NAS** with an x86 CPU (Intel or AMD with VT-x/AMD-V). ARM models do not support Virtualization Station.
+2. **Virtualization Station** installed from the QNAP App Center.
+3. **Admin credentials** — the username and password you use to log into the QNAP web UI. The server uses these to authenticate with the Virtualization Station API.
+4. **Network access** — the machine running the server needs HTTPS access to your NAS (port 443 by default).
+5. **Python 3.10+** on the machine running the server.
+
+### Optional: QEMU Guest Agent
+
+If you want the server to report VM IP addresses (via `get_vm_ips` and `get_overview`), install the QEMU guest agent **inside each VM**:
+
+```bash
+# For Ubuntu/Debian VMs:
+sudo apt install qemu-guest-agent
+sudo systemctl enable --now qemu-guest-agent
+```
+
+Without the guest agent, IP-related tools will return a helpful message explaining what's needed. Everything else works without it.
+
 ## Compatibility
 
 | Component | Tested | Expected |
@@ -15,13 +37,11 @@ MCP server for [QNAP Virtualization Station (QVS)](https://www.qnap.com/en/softw
 | QTS | — | 5.1.0+ |
 | QuTS hero | h5.2.8 | h5.1.0+ |
 | Virtualization Station | 4.1.x | 3.x+ |
-| NAS hardware | TS-873AeU (AMD Ryzen V1500B) | x86 with VT-x/AMD-V |
-
-ARM-based QNAP models do not support Virtualization Station.
+| NAS hardware | x86 (AMD Ryzen) | x86 with VT-x/AMD-V |
 
 ## Features
 
-**33 tools** across 5 categories:
+**33 tools** across 6 categories:
 
 - **VM lifecycle** — start, shutdown, force-stop, reset, suspend, resume
 - **VM management** — update settings (CPU, memory, name, auto-start), delete, clone, export
@@ -31,9 +51,7 @@ ARM-based QNAP models do not support Virtualization Station.
 - **Analysis** — resource overview dashboard (host CPU/RAM utilization, per-VM summary with networking), QVS audit logs, shutdown progress
 - **Safety** — all destructive operations require explicit `confirm=true`
 
-## Quick Start
-
-### Install
+## Install
 
 ```bash
 # Via uvx (recommended)
@@ -41,63 +59,133 @@ uvx mcp-server-qnap-qvs
 
 # Or via pip
 pip install mcp-server-qnap-qvs
+
+# Or via Docker (for remote/NAS deployment)
+docker pull ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
 ```
 
-Requires Python 3.10+.
+## How Authentication Works
 
-### Configure
+There are two separate authentication layers:
 
-Set environment variables:
+### 1. Server ↔ QNAP NAS (required)
+
+The server authenticates to your QNAP's Virtualization Station API using your NAS admin credentials. This happens automatically — you just provide the credentials via environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `QNAP_HOST` | NAS hostname or IP address | Yes |
+| `QNAP_PORT` | HTTPS port (default: `443`) | No |
+| `QNAP_USERNAME` | QTS admin username | Yes |
+| `QNAP_PASSWORD` | QTS admin password | Yes |
+| `QNAP_VERIFY_SSL` | Verify TLS certificate (default: `false`) | No |
+
+Most QNAP devices use self-signed certificates, so `QNAP_VERIFY_SSL=false` is typical. Set it to `true` if you've installed a valid certificate.
+
+### 2. MCP Client ↔ Server (SSE mode only)
+
+When running in **SSE mode** (remote/Docker), the server requires a Bearer token so only authorized MCP clients can connect:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `MCP_AUTH_TOKEN` | A secret string you choose (like a password) | No |
+
+- **If you set `MCP_AUTH_TOKEN`**: use that same value as the Bearer token in your MCP client config.
+- **If you don't set it**: the server generates a random token on startup and prints it to the log. Copy it from there.
+- **Stdio mode** (local, default): no token needed — the MCP client runs the server as a local process.
+
+## Configuration
+
+### Option A: Local Mode (stdio)
+
+The server runs on your machine. Claude Code spawns it as a subprocess — no network, no token needed.
+
+**Claude Code** (`~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "qnap-qvs": {
+      "command": "uvx",
+      "args": ["mcp-server-qnap-qvs"],
+      "env": {
+        "QNAP_HOST": "your-nas.local",
+        "QNAP_USERNAME": "admin",
+        "QNAP_PASSWORD": "your-password",
+        "QNAP_VERIFY_SSL": "false"
+      }
+    }
+  }
+}
+```
+
+**Claude Desktop** (`claude_desktop_config.json`): same format as above.
+
+### Option B: Remote Mode (SSE)
+
+The server runs on the NAS (or any Docker host) and MCP clients connect over the network.
+
+**Start the server:**
 
 ```bash
-export QNAP_HOST=your-nas.local    # NAS hostname or IP
-export QNAP_PORT=443               # HTTPS port (default: 443)
-export QNAP_USERNAME=admin         # QTS admin username
-export QNAP_PASSWORD=your-pass     # QTS password
-export QNAP_VERIFY_SSL=false       # Set true if using valid TLS cert
+# Via Docker (recommended for NAS deployment)
+docker run -d \
+  -p 8445:8445 \
+  -e QNAP_HOST=localhost \
+  -e QNAP_USERNAME=admin \
+  -e QNAP_PASSWORD=your-password \
+  -e QNAP_VERIFY_SSL=false \
+  -e MCP_AUTH_TOKEN=your-secret-token \
+  ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
+
+# Or via Docker Compose
+cp .env.example .env  # Edit .env with your credentials
+docker-compose up -d
+
+# Or directly with env vars
+MCP_TRANSPORT=sse MCP_AUTH_TOKEN=your-secret-token mcp-server-qnap-qvs
 ```
 
-Or use a `.env` file (see `.env.example`).
+When running on the NAS itself, set `QNAP_HOST=localhost` since the server and the API are on the same machine.
 
-### MCP Client Configuration
-
-#### Claude Code (`~/.claude.json`)
+**Connect your MCP client:**
 
 ```json
 {
   "mcpServers": {
     "qnap-qvs": {
-      "command": "uvx",
-      "args": ["mcp-server-qnap-qvs"],
-      "env": {
-        "QNAP_HOST": "your-nas.local",
-        "QNAP_USERNAME": "admin",
-        "QNAP_PASSWORD": "your-password",
-        "QNAP_VERIFY_SSL": "false"
-      }
+      "url": "http://your-nas.local:8445/sse",
+      "headers": {
+        "Authorization": "Bearer your-secret-token"
+      },
+      "transportType": "sse"
     }
   }
 }
 ```
 
-#### Claude Desktop (`claude_desktop_config.json`)
+### Option C: QNAP Container Station
 
-```json
-{
-  "mcpServers": {
-    "qnap-qvs": {
-      "command": "uvx",
-      "args": ["mcp-server-qnap-qvs"],
-      "env": {
-        "QNAP_HOST": "your-nas.local",
-        "QNAP_USERNAME": "admin",
-        "QNAP_PASSWORD": "your-password",
-        "QNAP_VERIFY_SSL": "false"
-      }
-    }
-  }
-}
-```
+1. Open Container Station on your QNAP NAS
+2. Pull `ghcr.io/arnstarn/mcp-server-qnap-qvs:latest` or import the `docker-compose.yml`
+3. Set environment variables (`QNAP_HOST=localhost`, `QNAP_USERNAME`, `QNAP_PASSWORD`, `MCP_AUTH_TOKEN`)
+4. The server runs on port 8445 — connect from any MCP client on your network
+
+A QPKG package for App Center installation is also available. See the `qpkg/` directory.
+
+## Environment Variables Reference
+
+| Variable | Description | Default | Used In |
+|----------|-------------|---------|---------|
+| `QNAP_HOST` | NAS hostname or IP | — | Both modes |
+| `QNAP_PORT` | NAS HTTPS port | `443` | Both modes |
+| `QNAP_USERNAME` | QTS admin username | — | Both modes |
+| `QNAP_PASSWORD` | QTS admin password | — | Both modes |
+| `QNAP_VERIFY_SSL` | Verify TLS cert | `false` | Both modes |
+| `MCP_TRANSPORT` | Transport mode: `stdio` or `sse` | `stdio` | — |
+| `MCP_HOST` | SSE listen address | `0.0.0.0` | SSE only |
+| `MCP_PORT` | SSE listen port | `8445` | SSE only |
+| `MCP_AUTH_TOKEN` | Bearer token for SSE auth | (auto-generated) | SSE only |
 
 ## Available Tools
 
@@ -108,7 +196,7 @@ Or use a `.env` file (see `.env.example`).
 | `list_vms` | List all VMs with full details |
 | `get_vm` | Get detailed info for a single VM |
 | `get_vm_states` | Lightweight status overview of all VMs |
-| `get_vm_ips` | Get IP addresses of a VM (requires QEMU guest agent) |
+| `get_vm_ips` | Get VM IP addresses (requires QEMU guest agent in the VM) |
 | `list_vm_disks` | List disks attached to a VM |
 | `get_vm_adapters` | Network interfaces — MAC, model, bridge |
 | `get_vm_graphics` | VNC console info — port, password status |
@@ -157,70 +245,40 @@ Or use a `.env` file (see `.env.example`).
 | `revert_snapshot` | Revert VM to a snapshot | Yes |
 | `delete_snapshot` | Delete a snapshot | Yes |
 
-## Authentication
-
-The QVS REST API uses a two-step session-based authentication:
-
-1. **QTS login** (`/cgi-bin/authLogin.cgi`) — returns a `NAS_SID` session cookie
-2. **QVS login** (`/qvs/auth/login`) with the `NAS_SID` — returns `csrftoken` + `sessionid` cookies
-
-All subsequent API calls include all three cookies plus an `X-CSRFToken` header. The client handles this automatically.
-
 ## Safety
 
 All destructive operations require `confirm=true`. Without it, the tool returns a preview of what it would do — no changes are made. This prevents accidental VM deletions, shutdowns, or snapshot reverts.
 
-## Running Remotely (SSE Mode)
+## Troubleshooting
 
-By default, the server runs in **stdio** mode for local MCP clients. To run it as a remote HTTP/SSE server (e.g., on the QNAP NAS itself or any Docker host):
+### "QEMU guest agent is not installed or not running"
 
-### Via Docker
-
-```bash
-docker run -d \
-  -p 8445:8445 \
-  -e QNAP_HOST=your-nas.local \
-  -e QNAP_USERNAME=admin \
-  -e QNAP_PASSWORD=your-password \
-  -e QNAP_VERIFY_SSL=false \
-  ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
-```
-
-### Via Docker Compose
+The `get_vm_ips` tool and the IP section of `get_overview` require the QEMU guest agent running inside the VM. Install it:
 
 ```bash
-# Copy .env.example to .env and edit with your credentials
-cp .env.example .env
-docker-compose up -d
+# Ubuntu/Debian
+sudo apt install qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent
+
+# CentOS/RHEL
+sudo yum install qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent
 ```
 
-### Via Environment Variables
+All other tools work without the guest agent.
 
-```bash
-MCP_TRANSPORT=sse MCP_PORT=8445 mcp-server-qnap-qvs
-```
+### "VM is not running"
 
-### Connect Your MCP Client
+IP addresses can only be retrieved from running VMs. Start the VM first with `start_vm`.
 
-```json
-{
-  "mcpServers": {
-    "qnap-qvs": {
-      "url": "http://your-nas.local:8445/sse",
-      "transportType": "sse"
-    }
-  }
-}
-```
+### Connection refused / timeout
 
-### QNAP Container Station
+- Verify the NAS is reachable: `curl -k https://your-nas.local:443`
+- Check that Virtualization Station is installed and running in the QNAP App Center
+- If using a non-default HTTPS port, set `QNAP_PORT` accordingly
 
-1. Open Container Station on your QNAP
-2. Import the `docker-compose.yml` or pull `ghcr.io/arnstarn/mcp-server-qnap-qvs:latest`
-3. Set environment variables with your credentials
-4. The server runs on port 8445 — connect from any MCP client on your network
+### Login failed
 
-A QPKG package for App Center installation is planned for a future release. See the `qpkg/` directory for the scaffold.
+- Verify your credentials work on the QNAP web UI
+- The username and password are for the QNAP system admin account (the same one you use to log into QTS/QuTS hero)
 
 ## Development
 
@@ -234,6 +292,10 @@ pytest
 
 # Lint
 ruff check src/ tests/
+
+# Build QPKG (requires Docker)
+docker build -t qpkg-builder -f qpkg/Dockerfile.builder .
+docker run --rm -v "$(pwd)/qpkg:/work" qpkg-builder
 ```
 
 ## API Reference
