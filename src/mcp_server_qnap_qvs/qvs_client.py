@@ -224,7 +224,15 @@ class QVSClient:
         """Get QVS event/audit logs."""
         return await self._request("GET", "/qvs/logs", params={"limit": limit, "page": page})
 
-    # ── Clone / Export ────────────────────────────────────────────
+    # ── VM CRUD ────────────────────────────────────────────────────
+
+    async def update_vm(self, vm_id: str, **fields: Any) -> dict[str, Any]:
+        """Update VM settings (PATCH). VM should be stopped for most changes."""
+        return await self._request("PATCH", f"/qvs/vms/{vm_id}", json=fields)
+
+    async def delete_vm(self, vm_id: str) -> dict[str, Any]:
+        """Delete/destroy a VM permanently."""
+        return await self._request("DELETE", f"/qvs/vms/{vm_id}")
 
     async def clone_vm(self, vm_id: str, name: str) -> dict[str, Any]:
         """Clone a VM."""
@@ -233,6 +241,42 @@ class QVSClient:
     async def export_vm(self, vm_id: str, path: str) -> dict[str, Any]:
         """Export a VM to a path on the NAS."""
         return await self._request("POST", f"/qvs/vms/{vm_id}/export", json={"path": path})
+
+    # ── Disk CRUD ─────────────────────────────────────────────────
+
+    async def update_disk(self, vm_id: str, disk_id: str, **fields: Any) -> dict[str, Any]:
+        """Update a disk (e.g. resize). VM should be stopped."""
+        return await self._request("PATCH", f"/qvs/vms/{vm_id}/disks/{disk_id}", json=fields)
+
+    async def delete_disk(self, vm_id: str, disk_id: str) -> dict[str, Any]:
+        """Delete/detach a disk from a VM."""
+        return await self._request("DELETE", f"/qvs/vms/{vm_id}/disks/{disk_id}")
+
+    # ── Network Adapter CRUD ──────────────────────────────────────
+
+    async def add_adapter(self, vm_id: str, **fields: Any) -> dict[str, Any]:
+        """Add a network adapter to a VM."""
+        return await self._request("POST", f"/qvs/vms/{vm_id}/adapters", json=fields)
+
+    async def update_adapter(self, vm_id: str, adapter_id: str, **fields: Any) -> dict[str, Any]:
+        """Update a network adapter on a VM."""
+        return await self._request("PATCH", f"/qvs/vms/{vm_id}/adapters/{adapter_id}", json=fields)
+
+    async def delete_adapter(self, vm_id: str, adapter_id: str) -> dict[str, Any]:
+        """Remove a network adapter from a VM."""
+        return await self._request("DELETE", f"/qvs/vms/{vm_id}/adapters/{adapter_id}")
+
+    # ── CDROM Operations ──────────────────────────────────────────
+
+    async def update_cdrom(self, vm_id: str, cdrom_id: str, **fields: Any) -> dict[str, Any]:
+        """Update a CD-ROM (mount/unmount ISO)."""
+        return await self._request("PATCH", f"/qvs/vms/{vm_id}/cdroms/{cdrom_id}", json=fields)
+
+    # ── Shutdown Progress ─────────────────────────────────────────
+
+    async def get_stopping_progress(self) -> dict[str, Any]:
+        """Get shutdown progress for all VMs."""
+        return await self._request("GET", "/qvs/vms/stopping_progress")
 
     # ── Snapshot Operations ───────────────────────────────────────
 

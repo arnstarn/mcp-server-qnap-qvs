@@ -7,6 +7,7 @@ def test_tools_registered():
     """Verify all expected tools are registered."""
     tools = {t.name for t in mcp._tool_manager.list_tools()}
     expected = {
+        # Read
         "list_vms",
         "get_vm",
         "get_vm_states",
@@ -18,14 +19,27 @@ def test_tools_registered():
         "get_vm_usbs",
         "list_images",
         "get_qvs_logs",
+        "get_overview",
+        "get_stopping_progress",
+        # VM CRUD
+        "update_vm",
+        "delete_vm",
         "clone_vm",
         "export_vm",
+        # Disk
+        "resize_disk",
+        "delete_disk",
+        # ISO
+        "mount_iso",
+        "unmount_iso",
+        # Lifecycle
         "start_vm",
         "shutdown_vm",
         "force_shutdown_vm",
         "reset_vm",
         "suspend_vm",
         "resume_vm",
+        # Snapshots
         "list_snapshots",
         "create_snapshot",
         "revert_snapshot",

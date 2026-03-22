@@ -272,6 +272,288 @@ async def export_vm(vm_id: str, path: str, confirm: bool = False) -> str:
         return _json({"error": str(e)})
 
 
+# ── VM Update / Delete ───────────────────────────────────────────
+
+
+@mcp.tool()
+async def update_vm(
+    vm_id: str,
+    name: str = "",
+    cores: int = 0,
+    memory_mb: int = 0,
+    description: str = "",
+    auto_start: str = "",
+    auto_start_delay: int = -1,
+    confirm: bool = False,
+) -> str:
+    """DESTRUCTIVE: Update virtual machine settings.
+
+    The VM should be stopped before changing CPU or memory. Only non-empty/non-zero
+    fields are applied — omit fields you don't want to change.
+
+    Args:
+        vm_id: The VM identifier
+        name: New VM name (leave empty to keep current)
+        cores: Number of vCPU cores (0 to keep current)
+        memory_mb: Memory in MB (0 to keep current)
+        description: New description (leave empty to keep current)
+        auto_start: Auto-start policy: 'on', 'off', or 'last' (leave empty to keep current)
+        auto_start_delay: Auto-start delay in seconds (-1 to keep current)
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    fields: dict = {}
+    if name:
+        fields["name"] = name
+    if cores > 0:
+        fields["cores"] = cores
+    if memory_mb > 0:
+        fields["memory"] = memory_mb * 1024 * 1024
+    if description:
+        fields["description"] = description
+    if auto_start:
+        fields["auto_start"] = auto_start
+    if auto_start_delay >= 0:
+        fields["auto_start_delay"] = auto_start_delay
+
+    if not fields:
+        return _json({"error": "No fields to update. Provide at least one field to change."})
+
+    if not confirm:
+        return _json({
+            "warning": f"This will update VM {vm_id} with: {fields}. Set confirm=true to proceed.",
+            "action": "update_vm",
+            "vm_id": vm_id,
+            "changes": fields,
+        })
+    try:
+        client = await _get_client()
+        result = await client.update_vm(vm_id, **fields)
+        return _json({"action": "update_vm", "vm_id": vm_id, "changes": fields, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def delete_vm(vm_id: str, confirm: bool = False) -> str:
+    """DESTRUCTIVE: Permanently delete a virtual machine and its disk images.
+
+    This cannot be undone. The VM must be stopped first.
+
+    Args:
+        vm_id: The VM identifier
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": f"This will PERMANENTLY DELETE VM {vm_id} and all its disks. Set confirm=true to proceed.",
+            "action": "delete_vm",
+            "vm_id": vm_id,
+        })
+    try:
+        client = await _get_client()
+        result = await client.delete_vm(vm_id)
+        return _json({"action": "delete_vm", "vm_id": vm_id, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+# ── Disk Update / Delete ─────────────────────────────────────────
+
+
+@mcp.tool()
+async def resize_disk(vm_id: str, disk_id: str, size_gb: int, confirm: bool = False) -> str:
+    """DESTRUCTIVE: Resize a virtual disk (expand only).
+
+    The VM should be stopped. Disks can only be expanded, not shrunk.
+
+    Args:
+        vm_id: The VM identifier
+        disk_id: The disk identifier (from list_vm_disks)
+        size_gb: New disk size in GB
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": f"This will resize disk {disk_id} on VM {vm_id} to {size_gb}GB. Set confirm=true to proceed.",
+            "action": "resize_disk",
+            "vm_id": vm_id,
+            "disk_id": disk_id,
+            "size_gb": size_gb,
+        })
+    try:
+        client = await _get_client()
+        result = await client.update_disk(vm_id, disk_id, size=size_gb * 1024 * 1024 * 1024)
+        return _json({
+            "action": "resize_disk", "vm_id": vm_id, "disk_id": disk_id,
+            "size_gb": size_gb, "result": result,
+        })
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def delete_disk(vm_id: str, disk_id: str, confirm: bool = False) -> str:
+    """DESTRUCTIVE: Remove and delete a disk from a virtual machine.
+
+    This permanently deletes the disk image. The VM must be stopped.
+
+    Args:
+        vm_id: The VM identifier
+        disk_id: The disk identifier
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": (
+                f"This will PERMANENTLY DELETE disk {disk_id} from VM {vm_id}. "
+                "Set confirm=true to proceed."
+            ),
+            "action": "delete_disk",
+            "vm_id": vm_id,
+            "disk_id": disk_id,
+        })
+    try:
+        client = await _get_client()
+        result = await client.delete_disk(vm_id, disk_id)
+        return _json({"action": "delete_disk", "vm_id": vm_id, "disk_id": disk_id, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+# ── Mount/Unmount ISO ────────────────────────────────────────────
+
+
+@mcp.tool()
+async def mount_iso(vm_id: str, cdrom_id: str, image_path: str, confirm: bool = False) -> str:
+    """DESTRUCTIVE: Mount an ISO image to a VM's CD-ROM drive.
+
+    Args:
+        vm_id: The VM identifier
+        cdrom_id: The CD-ROM drive identifier (from get_vm_cdroms)
+        image_path: Path to ISO on NAS (e.g. 'shared://ISOs/ubuntu.iso')
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": f"This will mount '{image_path}' to CD-ROM {cdrom_id} on VM {vm_id}. Set confirm=true.",
+            "action": "mount_iso",
+            "vm_id": vm_id,
+            "cdrom_id": cdrom_id,
+            "image_path": image_path,
+        })
+    try:
+        client = await _get_client()
+        result = await client.update_cdrom(vm_id, cdrom_id, path=image_path)
+        return _json({"action": "mount_iso", "vm_id": vm_id, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def unmount_iso(vm_id: str, cdrom_id: str, confirm: bool = False) -> str:
+    """DESTRUCTIVE: Unmount/eject an ISO from a VM's CD-ROM drive.
+
+    Args:
+        vm_id: The VM identifier
+        cdrom_id: The CD-ROM drive identifier
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": f"This will eject the ISO from CD-ROM {cdrom_id} on VM {vm_id}. Set confirm=true.",
+            "action": "unmount_iso",
+            "vm_id": vm_id,
+            "cdrom_id": cdrom_id,
+        })
+    try:
+        client = await _get_client()
+        result = await client.update_cdrom(vm_id, cdrom_id, path=None)
+        return _json({"action": "unmount_iso", "vm_id": vm_id, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+# ── Analysis / Summary ───────────────────────────────────────────
+
+
+@mcp.tool()
+async def get_overview() -> str:
+    """Get a summary dashboard of all VMs and resource usage.
+
+    Returns: VM count, running/stopped breakdown, total vCPUs, memory,
+    disk provisioned vs actual usage, and per-VM summary.
+    """
+    try:
+        client = await _get_client()
+        result = await client.list_vms()
+        vms = result.get("data", [])
+
+        running = [v for v in vms if v.get("power_state") == "running"]
+        stopped = [v for v in vms if v.get("power_state") == "stop"]
+        other = [v for v in vms if v.get("power_state") not in ("running", "stop")]
+
+        total_cores = sum(v.get("cores", 0) for v in vms)
+        active_cores = sum(v.get("cores", 0) for v in running)
+        total_mem = sum(v.get("memory", 0) for v in vms)
+        active_mem = sum(v.get("memory", 0) for v in running)
+        total_disk = sum(d.get("size", 0) for v in vms for d in v.get("disks", []))
+        actual_disk = sum(d.get("actual_size", 0) for v in vms for d in v.get("disks", []))
+
+        vm_summaries = []
+        for v in vms:
+            disks = v.get("disks", [])
+            disk_total = sum(d.get("size", 0) for d in disks)
+            disk_actual = sum(d.get("actual_size", 0) for d in disks)
+            vm_summaries.append({
+                "id": v["id"],
+                "name": v["name"],
+                "state": v.get("power_state"),
+                "cores": v.get("cores"),
+                "memory_mb": v.get("memory", 0) // 1024 // 1024,
+                "os_type": v.get("os_type"),
+                "auto_start": v.get("auto_start"),
+                "disk_provisioned_gb": round(disk_total / 1024 / 1024 / 1024, 1),
+                "disk_actual_gb": round(disk_actual / 1024 / 1024 / 1024, 1),
+                "nics": len(v.get("adapters", [])),
+                "snapshots_size_gb": round(
+                    sum(d.get("snapshots_size", 0) for d in disks) / 1024 / 1024 / 1024, 1
+                ),
+            })
+
+        overview = {
+            "total_vms": len(vms),
+            "running": len(running),
+            "stopped": len(stopped),
+            "other": len(other),
+            "resources": {
+                "vcpus_allocated": total_cores,
+                "vcpus_active": active_cores,
+                "memory_allocated_mb": total_mem // 1024 // 1024,
+                "memory_active_mb": active_mem // 1024 // 1024,
+                "disk_provisioned_gb": round(total_disk / 1024 / 1024 / 1024, 1),
+                "disk_actual_gb": round(actual_disk / 1024 / 1024 / 1024, 1),
+            },
+            "vms": vm_summaries,
+        }
+        return _json(overview)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def get_stopping_progress() -> str:
+    """Get the shutdown progress for all VMs.
+
+    Useful during bulk shutdown operations to monitor which VMs are still stopping.
+    """
+    try:
+        client = await _get_client()
+        result = await client.get_stopping_progress()
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
 # ── VM Lifecycle Tools (require confirm=true) ─────────────────────
 
 
