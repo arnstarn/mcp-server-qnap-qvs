@@ -14,3 +14,4 @@ venv/
 .ruff_cache/
 *.so
 .DS_Store
+qpkg/build/
