@@ -159,6 +159,8 @@ async def get_vm_ips(vm_id: str) -> str:
                 "error": "QEMU guest agent is not installed or not running in this VM.",
                 "hint": "Install it inside the VM: sudo apt install qemu-guest-agent "
                 "&& sudo systemctl enable --now qemu-guest-agent",
+                "tools": "Or use install_guest_agent_ssh (if you know the VM's IP) "
+                "or install_guest_agent_virsh (via QNAP console) to install it remotely.",
                 "status": status,
             })
         if status == 240:
@@ -169,6 +171,237 @@ async def get_vm_ips(vm_id: str) -> str:
         return _json(result)
     except QVSError as e:
         return _json({"error": str(e)})
+
+
+async def _run_ssh_command(host: str, username: str, password: str, command: str) -> dict:
+    """Run a command on a remote host via SSH. Returns dict with stdout, stderr, exit_code."""
+    import asyncio
+
+    proc = await asyncio.create_subprocess_exec(
+        "sshpass", "-p", password,
+        "ssh", "-o", "StrictHostKeyChecking=no",
+        "-o", "ConnectTimeout=10",
+        f"{username}@{host}",
+        command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    return {
+        "stdout": stdout.decode().strip(),
+        "stderr": stderr.decode().strip(),
+        "exit_code": proc.returncode,
+    }
+
+
+@mcp.tool()
+async def install_guest_agent_ssh(
+    vm_ip: str,
+    ssh_username: str,
+    ssh_password: str,
+    os_family: str = "debian",
+    confirm: bool = False,
+) -> str:
+    """DESTRUCTIVE: Install QEMU guest agent on a VM via direct SSH.
+
+    This SSHes into the VM and installs the qemu-guest-agent package.
+    The VM must be running and accessible via SSH from the machine running
+    this MCP server.
+
+    WARNING: The SSH password is passed as a tool argument and will be visible
+    in MCP client logs. Use SSH key auth for the VM if this is a concern.
+
+    Requires 'sshpass' to be installed on the machine running this server.
+
+    Args:
+        vm_ip: IP address of the VM (check your DHCP server or NAS if unknown)
+        ssh_username: SSH username for the VM
+        ssh_password: SSH password for the VM
+        os_family: 'debian' (apt) or 'redhat' (yum). Default: debian
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if os_family not in ("debian", "redhat"):
+        return _json({"error": "os_family must be 'debian' or 'redhat'"})
+
+    if os_family == "debian":
+        install_cmd = (
+            "sudo apt-get update -qq && "
+            "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-guest-agent && "
+            "sudo systemctl enable --now qemu-guest-agent && "
+            "sudo systemctl status qemu-guest-agent --no-pager"
+        )
+    else:
+        install_cmd = (
+            "sudo yum install -y -q qemu-guest-agent && "
+            "sudo systemctl enable --now qemu-guest-agent && "
+            "sudo systemctl status qemu-guest-agent --no-pager"
+        )
+
+    if not confirm:
+        return _json({
+            "warning": (
+                f"This will SSH into {vm_ip} as '{ssh_username}' and install qemu-guest-agent. "
+                "The SSH password will be passed via sshpass and may appear in process listings. "
+                "Set confirm=true to proceed."
+            ),
+            "action": "install_guest_agent_ssh",
+            "vm_ip": vm_ip,
+            "ssh_username": ssh_username,
+            "os_family": os_family,
+            "command": install_cmd,
+        })
+
+    try:
+        result = await _run_ssh_command(vm_ip, ssh_username, ssh_password, install_cmd)
+        if result["exit_code"] == 0:
+            return _json({
+                "action": "install_guest_agent_ssh",
+                "status": "success",
+                "vm_ip": vm_ip,
+                "output": result["stdout"],
+            })
+        return _json({
+            "action": "install_guest_agent_ssh",
+            "status": "failed",
+            "vm_ip": vm_ip,
+            "exit_code": result["exit_code"],
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
+        })
+    except FileNotFoundError:
+        return _json({
+            "error": "'sshpass' is not installed on this machine.",
+            "hint": "Install it: brew install sshpass (macOS) or apt install sshpass (Linux)",
+        })
+    except Exception as e:
+        return _json({"error": f"SSH failed: {e}"})
+
+
+@mcp.tool()
+async def install_guest_agent_virsh(
+    vm_id: str,
+    qnap_ssh_username: str = "",
+    qnap_ssh_password: str = "",
+    os_family: str = "debian",
+    confirm: bool = False,
+) -> str:
+    """DESTRUCTIVE: Install QEMU guest agent on a VM via QNAP virsh console.
+
+    This SSHes into the QNAP NAS, then uses virsh to send commands to the VM's
+    serial console. Does NOT require knowing the VM's IP address. The VM must be
+    running.
+
+    WARNING: Requires SSH credentials for the QNAP NAS (not the VM). The password
+    will be visible in MCP client logs.
+
+    This method is less reliable than direct SSH — it sends keystrokes to the VM
+    console and cannot easily verify success. Use install_guest_agent_ssh if the
+    VM is SSH-accessible.
+
+    If qnap_ssh_username/password are not provided, falls back to QNAP_USERNAME
+    and QNAP_PASSWORD from the server config.
+
+    Args:
+        vm_id: The VM identifier
+        qnap_ssh_username: SSH username for the QNAP NAS (default: QNAP_USERNAME)
+        qnap_ssh_password: SSH password for the QNAP NAS (default: QNAP_PASSWORD)
+        os_family: 'debian' (apt) or 'redhat' (yum). Default: debian
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if os_family not in ("debian", "redhat"):
+        return _json({"error": "os_family must be 'debian' or 'redhat'"})
+
+    # Fall back to QNAP config credentials
+    config = QVSConfig()
+    nas_user = qnap_ssh_username or config.username
+    nas_pass = qnap_ssh_password or config.password
+    nas_host = config.host
+
+    if os_family == "debian":
+        install_cmd = (
+            "apt-get update -qq && "
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-guest-agent && "
+            "systemctl enable --now qemu-guest-agent"
+        )
+    else:
+        install_cmd = (
+            "yum install -y -q qemu-guest-agent && "
+            "systemctl enable --now qemu-guest-agent"
+        )
+
+    # Get VM name for virsh
+    try:
+        client = await _get_client()
+        vm_result = await client.get_vm(vm_id)
+        vm_data = vm_result.get("data", vm_result)
+        vm_name = vm_data.get("name", f"vm-{vm_id}")
+        vm_state = vm_data.get("power_state", "unknown")
+    except QVSError as e:
+        return _json({"error": f"Failed to get VM info: {e}"})
+
+    if vm_state != "running":
+        return _json({"error": f"VM {vm_id} ({vm_name}) is not running. Start it first."})
+
+    if not confirm:
+        return _json({
+            "warning": (
+                f"This will SSH into the QNAP NAS at '{nas_host}' as '{nas_user}', "
+                f"then run virsh to install qemu-guest-agent on VM '{vm_name}' (ID {vm_id}). "
+                "This method sends commands to the VM console and is less reliable than "
+                "direct SSH. The QNAP SSH password may appear in process listings. "
+                "Set confirm=true to proceed."
+            ),
+            "action": "install_guest_agent_virsh",
+            "vm_id": vm_id,
+            "vm_name": vm_name,
+            "nas_host": nas_host,
+            "os_family": os_family,
+        })
+
+    # Build the virsh command to run on the QNAP
+    # QVS uses /QVS/usr/bin/virsh on newer QTS
+    virsh_cmd = (
+        "export PATH=$PATH:/QVS/usr/bin:/QVS/usr/sbin:/KVM/opt/bin:/KVM/opt/sbin && "
+        "export LD_LIBRARY_PATH=/QVS/usr/lib:/QVS/usr/lib64:/KVM/opt/lib:/KVM/opt/lib64 && "
+        f"virsh qemu-agent-command '{vm_name}' "
+        f"'{{\"execute\":\"guest-exec\",\"arguments\":{{\"path\":\"/bin/bash\","
+        f"\"arg\":[\"-c\",\"{install_cmd}\"],\"capture-output\":true}}}}'"
+    )
+
+    try:
+        result = await _run_ssh_command(nas_host, nas_user, nas_pass, virsh_cmd)
+        if result["exit_code"] == 0:
+            return _json({
+                "action": "install_guest_agent_virsh",
+                "status": "command_sent",
+                "vm_id": vm_id,
+                "vm_name": vm_name,
+                "note": (
+                    "The install command was sent to the VM via virsh guest-exec. "
+                    "This requires the guest agent to already be running (chicken-and-egg). "
+                    "If this fails, use install_guest_agent_ssh with the VM's IP address instead."
+                ),
+                "output": result["stdout"],
+            })
+        return _json({
+            "action": "install_guest_agent_virsh",
+            "status": "failed",
+            "vm_id": vm_id,
+            "exit_code": result["exit_code"],
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
+            "hint": (
+                "The virsh method requires either a working guest agent or serial console. "
+                "If this failed, use install_guest_agent_ssh with the VM's IP address instead."
+            ),
+        })
+    except FileNotFoundError:
+        return _json({
+            "error": "'sshpass' is not installed on this machine.",
+            "hint": "Install it: brew install sshpass (macOS) or apt install sshpass (Linux)",
+        })
+    except Exception as e:
+        return _json({"error": f"SSH to QNAP failed: {e}"})
 
 
 @mcp.tool()

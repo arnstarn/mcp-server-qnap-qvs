@@ -32,6 +32,9 @@ def test_tools_registered():
         # ISO
         "mount_iso",
         "unmount_iso",
+        # Guest agent install
+        "install_guest_agent_ssh",
+        "install_guest_agent_virsh",
         # Lifecycle
         "start_vm",
         "shutdown_vm",
