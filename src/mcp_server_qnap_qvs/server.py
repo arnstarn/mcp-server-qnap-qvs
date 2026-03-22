@@ -57,6 +57,10 @@ class BearerTokenVerifier:
 
 def _build_mcp() -> tuple[FastMCP, BearerTokenVerifier | None]:
     """Build the FastMCP instance with transport-aware settings."""
+    # Load env file early so MCP_AUTH_TOKEN is available
+    from .config import _load_env_file
+    _load_env_file()
+
     transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
     if transport == "sse":
         host = os.environ.get("MCP_HOST", "0.0.0.0")

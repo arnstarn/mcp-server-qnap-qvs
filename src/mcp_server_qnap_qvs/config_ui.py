@@ -396,9 +396,6 @@ your settings.</div></div>
 <div class="copy-block">
 <button type="button" class="btn btn-sm" onclick="copyConfig()">Copy</button>
 <div class="client-config" id="clientConfig"></div></div></div>
-<div class="actions" style="margin-top: 16px;">
-<a href="/" class="btn">Back to Settings</a>
-</div>
 </div>
 <script>
 function copyConfig() {{
