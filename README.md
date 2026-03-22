@@ -171,7 +171,81 @@ When running on the NAS itself, set `QNAP_HOST=localhost` since the server and t
 3. Set environment variables (`QNAP_HOST=localhost`, `QNAP_USERNAME`, `QNAP_PASSWORD`, `MCP_AUTH_TOKEN`)
 4. The server runs on port 8445 — connect from any MCP client on your network
 
-A QPKG package for App Center installation is also available. See the `qpkg/` directory.
+### Option D: QPKG (App Center)
+
+Install the QPKG directly on your QNAP NAS. It runs as a Docker container via Container Station.
+
+**Step 1: Add the repository**
+
+1. Open **App Center** on your QNAP
+2. Click the **Settings** icon (gear, top-right)
+3. Go to **App Repository**
+4. Add this URL:
+   ```
+   https://raw.githubusercontent.com/arnstarn/mcp-server-qnap-qvs/main/qpkg/repo.xml
+   ```
+5. Click **Apply**
+
+**Step 2: Install**
+
+1. Search for **"MCP QVS Server"** in App Center
+2. Click **Install**
+3. Wait for the Docker image to download (first install only)
+
+**Step 3: Configure credentials**
+
+The QPKG creates a `.env` file with placeholder values. You need to edit it with your actual QNAP credentials.
+
+SSH into your NAS and edit the `.env` file:
+
+```bash
+ssh your-username@your-nas.local
+
+# Find the install path
+QPKG_DIR=$(getcfg mcp-server-qnap-qvs Install_Path -f /etc/config/qpkg.conf)
+
+# Edit the .env file (use vi, nano, or echo)
+cat > "$QPKG_DIR/.env" << 'EOF'
+QNAP_HOST=localhost
+QNAP_PORT=443
+QNAP_USERNAME=your-admin-username
+QNAP_PASSWORD=your-admin-password
+QNAP_VERIFY_SSL=false
+MCP_AUTH_TOKEN=pick-any-secret-string-here
+EOF
+
+# Restart the service to pick up the new config
+/etc/init.d/mcp-server-qnap-qvs.sh restart
+```
+
+Replace `your-admin-username` and `your-admin-password` with the credentials you use to log into the QNAP web UI. The `MCP_AUTH_TOKEN` is any secret string you choose — you'll use it as the Bearer token in your MCP client config.
+
+**Step 4: Connect your MCP client**
+
+```json
+{
+  "mcpServers": {
+    "qnap-qvs": {
+      "url": "http://your-nas.local:8445/sse",
+      "headers": {
+        "Authorization": "Bearer pick-any-secret-string-here"
+      },
+      "transportType": "sse"
+    }
+  }
+}
+```
+
+Use the same `MCP_AUTH_TOKEN` value you set in Step 3.
+
+**Updating:** When a new version is released, the App Center will show an update. Or pull the latest Docker image manually:
+
+```bash
+ssh your-username@your-nas.local
+CS_DIR=$(getcfg container-station Install_Path -f /etc/config/qpkg.conf)
+${CS_DIR}/bin/docker pull ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
+/etc/init.d/mcp-server-qnap-qvs.sh restart
+```
 
 ## Environment Variables Reference
 
