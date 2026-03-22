@@ -1,10 +1,12 @@
 """Async HTTP client for the QNAP Virtualization Station (QVS) REST API.
 
-The QVS API lives at /qvs on the QNAP NAS and uses session-based auth with
-CSRF token protection. This client handles login, session management, and
-provides typed methods for all supported VM operations.
+The QVS API lives at /qvs on the QNAP NAS. Authentication is a two-step process:
+1. QTS login via /cgi-bin/authLogin.cgi → returns NAS_SID session cookie
+2. QVS login via /qvs/auth/login with NAS_SID → returns csrftoken + sessionid cookies
 
-Tested on: QTS 5.x with Virtualization Station 3.x+
+All subsequent QVS API calls require all three cookies plus an X-CSRFToken header.
+
+Tested on: QuTS hero h5.x with Virtualization Station 4.1.x
 API reference: https://github.com/tmeckel/qnap-qvs-sdk-for-go (auto-generated from QNAP OpenAPI specs)
 """
 
@@ -12,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -30,12 +33,16 @@ class QVSError(Exception):
 
 
 class QVSClient:
-    """Async client for QNAP Virtualization Station REST API."""
+    """Async client for QNAP Virtualization Station REST API.
+
+    Uses two-step auth: QTS session → QVS session with CSRF token.
+    """
 
     def __init__(self, config: QVSConfig) -> None:
         self._config = config
         self._client: httpx.AsyncClient | None = None
         self._csrf_token: str | None = None
+        self._cookies: dict[str, str] = {}
 
     async def __aenter__(self) -> QVSClient:
         self._client = httpx.AsyncClient(
@@ -56,35 +63,54 @@ class QVSClient:
             self._client = None
 
     async def _login(self) -> None:
-        """Authenticate to QVS and establish a session with CSRF token."""
+        """Two-step authentication: QTS login then QVS login."""
         assert self._client is not None
 
-        password_b64 = base64.b64encode(self._config.password.encode()).decode()
+        # Step 1: QTS system login to get NAS_SID
+        qts_response = await self._client.get(
+            "/cgi-bin/authLogin.cgi",
+            params={"user": self._config.username, "plain_pwd": self._config.password},
+        )
+        if qts_response.status_code != 200:
+            raise QVSError(
+                f"QTS login failed with status {qts_response.status_code}",
+                qts_response.status_code,
+            )
 
-        response = await self._client.post(
+        sid_match = re.search(r"<authSid><!\[CDATA\[(.+?)\]\]></authSid>", qts_response.text)
+        auth_match = re.search(r"<authPassed><!\[CDATA\[(\d+)\]\]></authPassed>", qts_response.text)
+
+        if not auth_match or auth_match.group(1) != "1":
+            raise QVSError("QTS login failed: invalid credentials")
+        if not sid_match:
+            raise QVSError("QTS login failed: no session ID returned")
+
+        nas_sid = sid_match.group(1)
+        self._cookies["NAS_SID"] = nas_sid
+        logger.info("QTS login successful, SID obtained")
+
+        # Step 2: QVS login with NAS_SID to get CSRF token + session
+        password_b64 = base64.b64encode(self._config.password.encode()).decode()
+        qvs_response = await self._client.post(
             "/qvs/auth/login",
             data={"username": self._config.username, "password": password_b64},
+            cookies=self._cookies,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
-        if response.status_code != 200:
-            raise QVSError(f"Login failed with status {response.status_code}: {response.text}", response.status_code)
+        if qvs_response.status_code != 200:
+            raise QVSError(
+                f"QVS login failed with status {qvs_response.status_code}",
+                qvs_response.status_code,
+            )
 
-        body = response.json()
-        if body.get("status") != 0:
-            raise QVSError(f"Login failed: {body.get('message', 'unknown error')}")
+        # Collect QVS cookies (csrftoken, sessionid)
+        for name, value in qvs_response.cookies.items():
+            self._cookies[name] = value
 
-        # Extract CSRF token from cookies
-        csrf = response.cookies.get("csrftoken")
+        csrf = self._cookies.get("csrftoken")
         if not csrf:
-            # Try from Set-Cookie header as fallback
-            for cookie in self._client.cookies.jar:
-                if cookie.name == "csrftoken":
-                    csrf = cookie.value
-                    break
-
-        if not csrf:
-            raise QVSError("Login succeeded but no CSRF token received")
+            raise QVSError("QVS login completed but no CSRF token received")
 
         self._csrf_token = csrf
         logger.info("QVS login successful for user %s", self._config.username)
@@ -103,7 +129,9 @@ class QVSClient:
             headers["Referer"] = f"{self._config.base_url}/qvs/"
 
         try:
-            response = await self._client.request(method, path, headers=headers, **kwargs)
+            response = await self._client.request(
+                method, path, headers=headers, cookies=self._cookies, **kwargs
+            )
         except httpx.RequestError as e:
             raise QVSError(f"Request to {path} failed: {e}") from e
 
