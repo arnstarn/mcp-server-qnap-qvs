@@ -849,10 +849,30 @@ async def delete_snapshot(vm_id: str, snapshot_id: str, confirm: bool = False) -
 
 
 def main() -> None:
-    """Entry point for the MCP server."""
+    """Entry point for the MCP server.
+
+    Supports two transport modes via MCP_TRANSPORT env var:
+    - stdio (default): for local MCP clients (Claude Code, Claude Desktop)
+    - sse: for remote MCP clients over HTTP (e.g. running on the QNAP NAS)
+
+    SSE mode configuration:
+    - MCP_TRANSPORT=sse
+    - MCP_HOST=0.0.0.0 (default)
+    - MCP_PORT=8445 (default)
+    """
+    import os
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    logger.info("Starting QNAP QVS MCP server")
-    mcp.run()
+
+    transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    if transport == "sse":
+        host = os.environ.get("MCP_HOST", "0.0.0.0")
+        port = int(os.environ.get("MCP_PORT", "8445"))
+        logger.info("Starting QNAP QVS MCP server (SSE on %s:%d)", host, port)
+        mcp.run(transport="sse", host=host, port=port)
+    else:
+        logger.info("Starting QNAP QVS MCP server (stdio)")
+        mcp.run()
 
 
 if __name__ == "__main__":

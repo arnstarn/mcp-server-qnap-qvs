@@ -170,6 +170,58 @@ All subsequent API calls include all three cookies plus an `X-CSRFToken` header.
 
 All destructive operations require `confirm=true`. Without it, the tool returns a preview of what it would do — no changes are made. This prevents accidental VM deletions, shutdowns, or snapshot reverts.
 
+## Running Remotely (SSE Mode)
+
+By default, the server runs in **stdio** mode for local MCP clients. To run it as a remote HTTP/SSE server (e.g., on the QNAP NAS itself or any Docker host):
+
+### Via Docker
+
+```bash
+docker run -d \
+  -p 8445:8445 \
+  -e QNAP_HOST=your-nas.local \
+  -e QNAP_USERNAME=admin \
+  -e QNAP_PASSWORD=your-password \
+  -e QNAP_VERIFY_SSL=false \
+  ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
+```
+
+### Via Docker Compose
+
+```bash
+# Copy .env.example to .env and edit with your credentials
+cp .env.example .env
+docker-compose up -d
+```
+
+### Via Environment Variables
+
+```bash
+MCP_TRANSPORT=sse MCP_PORT=8445 mcp-server-qnap-qvs
+```
+
+### Connect Your MCP Client
+
+```json
+{
+  "mcpServers": {
+    "qnap-qvs": {
+      "url": "http://your-nas.local:8445/sse",
+      "transportType": "sse"
+    }
+  }
+}
+```
+
+### QNAP Container Station
+
+1. Open Container Station on your QNAP
+2. Import the `docker-compose.yml` or pull `ghcr.io/arnstarn/mcp-server-qnap-qvs:latest`
+3. Set environment variables with your credentials
+4. The server runs on port 8445 — connect from any MCP client on your network
+
+A QPKG package for App Center installation is planned for a future release. See the `qpkg/` directory for the scaffold.
+
 ## Development
 
 ```bash

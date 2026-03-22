@@ -1,0 +1,13 @@
+# QPKG docker-compose — runs inside the QPKG installation directory
+services:
+  mcp-server-qnap-qvs:
+    image: ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
+    container_name: mcp-server-qnap-qvs
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8445

@@ -1,0 +1,23 @@
+# Deploy on QNAP via Container Station or any Docker host.
+#
+# 1. Copy this file and .env to your NAS
+# 2. Edit .env with your QNAP credentials
+# 3. Run: docker-compose up -d
+# 4. Connect your MCP client to http://<NAS_IP>:8445/sse
+#
+# For QNAP Container Station: import this file via the UI.
+
+services:
+  mcp-server-qnap-qvs:
+    build: .
+    image: ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
+    container_name: mcp-server-qnap-qvs
+    restart: unless-stopped
+    ports:
+      - "8445:8445"
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8445

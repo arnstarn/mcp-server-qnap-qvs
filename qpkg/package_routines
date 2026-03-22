@@ -1,0 +1,32 @@
+#!/bin/sh
+# QPKG install/remove hooks
+
+pkg_pre_install() {
+    # Check if Container Station is available
+    if ! command -v docker-compose >/dev/null 2>&1; then
+        echo "ERROR: Container Station (docker-compose) is required but not found."
+        echo "Please install Container Station from the App Center first."
+        return 1
+    fi
+}
+
+pkg_post_install() {
+    # Copy .env.example if .env doesn't exist
+    QPKG_DIR="/share/CACHEDEV1_DATA/.qpkg/mcp-server-qnap-qvs"
+    if [ ! -f "${QPKG_DIR}/.env" ]; then
+        cp "${QPKG_DIR}/.env.example" "${QPKG_DIR}/.env"
+        echo "Created ${QPKG_DIR}/.env — please edit with your QNAP credentials."
+    fi
+
+    # Make service script executable
+    chmod +x "${QPKG_DIR}/mcp-server-qnap-qvs.sh"
+
+    # Pull the Docker image
+    docker pull ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
+}
+
+pkg_pre_remove() {
+    # Stop the container before uninstalling
+    QPKG_DIR="/share/CACHEDEV1_DATA/.qpkg/mcp-server-qnap-qvs"
+    cd "${QPKG_DIR}" && docker-compose down 2>/dev/null
+}
