@@ -20,10 +20,22 @@ import urllib.parse
 ENV_FILE = os.environ.get("ENV_FILE", "/config/.env")
 UI_PORT = int(os.environ.get("CONFIG_UI_PORT", "8446"))
 
+
+def _detect_default_host() -> str:
+    """Detect the best default for QNAP_HOST.
+
+    If running on the QNAP itself (qpkg.conf exists), use 'localhost'.
+    Otherwise return empty — the JS will fill it from the browser URL.
+    """
+    if os.path.exists("/etc/config/qpkg.conf"):
+        return "localhost"
+    return ""
+
+
 FIELDS = [
     (
-        "QNAP_HOST", "QNAP Hostname / IP", "localhost",
-        "Hostname or IP of your QNAP NAS. Use 'localhost' if on the NAS.",
+        "QNAP_HOST", "QNAP Hostname / IP", _detect_default_host(),
+        "Hostname or IP of your QNAP NAS. Auto-detected from your browser.",
     ),
     (
         "QNAP_PORT", "HTTPS Port", "443",
@@ -135,6 +147,22 @@ function updateClientConfig() {
     document.getElementById('clientConfig').textContent = config;
 }
 document.querySelectorAll('input').forEach(el => el.addEventListener('input', updateClientConfig));
+
+// Auto-detect QNAP host from browser URL if field is empty
+(function() {
+    const hostField = document.getElementById('field_QNAP_HOST');
+    if (hostField && !hostField.value) {
+        const browserHost = window.location.hostname;
+        // If accessing the config UI via an IP or hostname (not localhost),
+        // that's the QNAP's address — prefill it
+        if (browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1') {
+            hostField.value = browserHost;
+        } else {
+            hostField.value = 'localhost';
+        }
+    }
+})();
+
 updateClientConfig();
 """
 
