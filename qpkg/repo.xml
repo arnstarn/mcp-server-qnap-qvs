@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugins>
+  <cachechk>0</cachechk>
+  <item>
+    <name>mcp-server-qnap-qvs</name>
+    <internalName>mcp-server-qnap-qvs</internalName>
+    <category>Utilities</category>
+    <type>1</type>
+    <icon80>https://raw.githubusercontent.com/arnstarn/mcp-server-qnap-qvs/main/qpkg/icons/mcp-server-qnap-qvs_80.png</icon80>
+    <icon100>https://raw.githubusercontent.com/arnstarn/mcp-server-qnap-qvs/main/qpkg/icons/mcp-server-qnap-qvs_80.png</icon100>
+    <description>MCP server for QNAP Virtualization Station — manage VMs via AI</description>
+    <developer>arnstarn</developer>
+    <developerLink>https://github.com/arnstarn/mcp-server-qnap-qvs</developerLink>
+    <fwVersion>5.1.0</fwVersion>
+    <version>0.3.0</version>
+    <platform>
+      <platformID>TS-NASX86</platformID>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/latest/download/mcp-server-qnap-qvs_0.3.0.qpkg</location>
+    </platform>
+  </item>
+</plugins>
