@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import secrets
 
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 from .config import QVSConfig
@@ -18,19 +22,59 @@ from .qvs_client import QVSClient, QVSError
 
 logger = logging.getLogger(__name__)
 
-def _build_mcp() -> FastMCP:
-    """Build the FastMCP instance with transport-aware settings."""
-    import os
 
+class BearerTokenVerifier:
+    """Simple Bearer token verifier for SSE mode.
+
+    Reads the expected token from MCP_AUTH_TOKEN env var. If not set,
+    generates a random token and prints it on startup.
+    """
+
+    def __init__(self) -> None:
+        self.token = os.environ.get("MCP_AUTH_TOKEN", "")
+        if not self.token:
+            self.token = secrets.token_urlsafe(48)
+            self._generated = True
+        else:
+            self._generated = False
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if token == self.token:
+            return AccessToken(
+                token=token,
+                client_id="mcp-client",
+                scopes=["qvs:read", "qvs:write"],
+            )
+        return None
+
+    def log_token(self) -> None:
+        if self._generated:
+            logger.info("Generated auth token: Bearer %s", self.token)
+            logger.info("Set MCP_AUTH_TOKEN env var to use a fixed token instead")
+        else:
+            logger.info("Using auth token from MCP_AUTH_TOKEN env var")
+
+
+def _build_mcp() -> tuple[FastMCP, BearerTokenVerifier | None]:
+    """Build the FastMCP instance with transport-aware settings."""
     transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
     if transport == "sse":
         host = os.environ.get("MCP_HOST", "0.0.0.0")
         port = int(os.environ.get("MCP_PORT", "8445"))
-        return FastMCP("qnap-qvs", host=host, port=port)
-    return FastMCP("qnap-qvs")
+        verifier = BearerTokenVerifier()
+        base_url = f"http://{host}:{port}"
+        auth = AuthSettings(
+            issuer_url=base_url,
+            resource_server_url=base_url,
+        )
+        return FastMCP(
+            "qnap-qvs", host=host, port=port,
+            auth=auth, token_verifier=verifier,
+        ), verifier
+    return FastMCP("qnap-qvs"), None
 
 
-mcp = _build_mcp()
+mcp, _token_verifier = _build_mcp()
 
 _client: QVSClient | None = None
 
@@ -881,6 +925,8 @@ def main() -> None:
         logger.info("Starting QNAP QVS MCP server (SSE on %s:%s)",
                      os.environ.get("MCP_HOST", "0.0.0.0"),
                      os.environ.get("MCP_PORT", "8445"))
+        if _token_verifier:
+            _token_verifier.log_token()
         mcp.run(transport="sse")
     else:
         logger.info("Starting QNAP QVS MCP server (stdio)")
