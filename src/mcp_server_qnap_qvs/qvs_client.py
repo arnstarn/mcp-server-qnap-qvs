@@ -194,6 +194,46 @@ class QVSClient:
         """List disks attached to a VM."""
         return await self._request("GET", f"/qvs/vms/{vm_id}/disks")
 
+    # ── VM Hardware Info ──────────────────────────────────────────
+
+    async def get_vm_adapters(self, vm_id: str) -> dict[str, Any]:
+        """Get network adapters (interfaces) for a VM."""
+        return await self._request("GET", f"/qvs/vms/{vm_id}/adapters")
+
+    async def get_vm_graphics(self, vm_id: str) -> dict[str, Any]:
+        """Get graphics/VNC console info for a VM."""
+        return await self._request("GET", f"/qvs/vms/{vm_id}/graphics")
+
+    async def get_vm_cdroms(self, vm_id: str) -> dict[str, Any]:
+        """Get CD-ROM drives for a VM."""
+        return await self._request("GET", f"/qvs/vms/{vm_id}/cdroms")
+
+    async def get_vm_usbs(self, vm_id: str) -> dict[str, Any]:
+        """Get USB passthrough devices for a VM."""
+        return await self._request("GET", f"/qvs/vms/{vm_id}/usbs")
+
+    # ── Images / ISOs ─────────────────────────────────────────────
+
+    async def list_images(self) -> dict[str, Any]:
+        """List available ISO images on the NAS."""
+        return await self._request("GET", "/qvs/images")
+
+    # ── Logs ──────────────────────────────────────────────────────
+
+    async def get_logs(self, limit: int = 50, page: int = 1) -> dict[str, Any]:
+        """Get QVS event/audit logs."""
+        return await self._request("GET", "/qvs/logs", params={"limit": limit, "page": page})
+
+    # ── Clone / Export ────────────────────────────────────────────
+
+    async def clone_vm(self, vm_id: str, name: str) -> dict[str, Any]:
+        """Clone a VM."""
+        return await self._request("POST", f"/qvs/vms/{vm_id}/clone", json={"name": name})
+
+    async def export_vm(self, vm_id: str, path: str) -> dict[str, Any]:
+        """Export a VM to a path on the NAS."""
+        return await self._request("POST", f"/qvs/vms/{vm_id}/export", json={"path": path})
+
     # ── Snapshot Operations ───────────────────────────────────────
 
     async def list_snapshots(self, vm_id: str) -> dict[str, Any]:

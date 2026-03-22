@@ -114,6 +114,164 @@ async def list_vm_disks(vm_id: str) -> str:
         return _json({"error": str(e)})
 
 
+# ── VM Hardware Info Tools ────────────────────────────────────────
+
+
+@mcp.tool()
+async def get_vm_adapters(vm_id: str) -> str:
+    """Get network adapters for a virtual machine.
+
+    Returns MAC addresses, bridge assignments, NIC model (virtio/e1000), and queue config.
+
+    Args:
+        vm_id: The VM identifier
+    """
+    try:
+        client = await _get_client()
+        result = await client.get_vm_adapters(vm_id)
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def get_vm_graphics(vm_id: str) -> str:
+    """Get graphics/VNC console info for a virtual machine.
+
+    Returns VNC port, type, and whether password protection is enabled.
+
+    Args:
+        vm_id: The VM identifier
+    """
+    try:
+        client = await _get_client()
+        result = await client.get_vm_graphics(vm_id)
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def get_vm_cdroms(vm_id: str) -> str:
+    """Get CD-ROM drives and mounted ISOs for a virtual machine.
+
+    Args:
+        vm_id: The VM identifier
+    """
+    try:
+        client = await _get_client()
+        result = await client.get_vm_cdroms(vm_id)
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def get_vm_usbs(vm_id: str) -> str:
+    """Get USB passthrough devices attached to a virtual machine.
+
+    Args:
+        vm_id: The VM identifier
+    """
+    try:
+        client = await _get_client()
+        result = await client.get_vm_usbs(vm_id)
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+# ── Images / ISOs ────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def list_images() -> str:
+    """List ISO images available on the QNAP NAS for mounting to VMs."""
+    try:
+        client = await _get_client()
+        result = await client.list_images()
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+# ── Logs ─────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def get_qvs_logs(limit: int = 50, page: int = 1) -> str:
+    """Get Virtualization Station event and audit logs.
+
+    Shows VM starts, stops, resets, config changes, login events, errors, etc.
+
+    Args:
+        limit: Number of log entries to return (default 50)
+        page: Page number for pagination (default 1)
+    """
+    try:
+        client = await _get_client()
+        result = await client.get_logs(limit=limit, page=page)
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+# ── Clone / Export ───────────────────────────────────────────────
+
+
+@mcp.tool()
+async def clone_vm(vm_id: str, name: str, confirm: bool = False) -> str:
+    """DESTRUCTIVE: Clone a virtual machine.
+
+    Creates a full copy of the VM with a new name. The source VM should
+    ideally be stopped for a consistent clone.
+
+    Args:
+        vm_id: The source VM identifier
+        name: Name for the cloned VM
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": f"This will clone VM {vm_id} as '{name}'. Set confirm=true to proceed.",
+            "action": "clone_vm",
+            "vm_id": vm_id,
+            "clone_name": name,
+        })
+    try:
+        client = await _get_client()
+        result = await client.clone_vm(vm_id, name)
+        return _json({"action": "clone_vm", "vm_id": vm_id, "clone_name": name, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def export_vm(vm_id: str, path: str, confirm: bool = False) -> str:
+    """DESTRUCTIVE: Export a virtual machine to a path on the NAS.
+
+    Exports the VM disk images and configuration to the specified shared folder path.
+
+    Args:
+        vm_id: The VM identifier
+        path: Destination path on the NAS (e.g. 'shared://VMs/exports/')
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": f"This will export VM {vm_id} to '{path}'. Set confirm=true to proceed.",
+            "action": "export_vm",
+            "vm_id": vm_id,
+            "path": path,
+        })
+    try:
+        client = await _get_client()
+        result = await client.export_vm(vm_id, path)
+        return _json({"action": "export_vm", "vm_id": vm_id, "path": path, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
 # ── VM Lifecycle Tools (require confirm=true) ─────────────────────
 
 
