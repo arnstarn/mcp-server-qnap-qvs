@@ -1,11 +1,11 @@
 #!/bin/sh
 # Service script for mcp-server-qnap-qvs QPKG
-# Manages the Docker container for the MCP QVS server
 
 CONF=/etc/config/qpkg.conf
 QPKG_NAME="mcp-server-qnap-qvs"
 QPKG_DIR=$(getcfg $QPKG_NAME Install_Path -f $CONF)
-DOCKER=/usr/local/bin/docker
+CS_DIR=$(getcfg container-station Install_Path -f $CONF)
+DOCKER="${CS_DIR}/bin/docker"
 COMPOSE="$DOCKER compose"
 COMPOSE_FILE="${QPKG_DIR}/docker-compose.yml"
 ENV_FILE="${QPKG_DIR}/.env"
@@ -15,6 +15,10 @@ case "$1" in
         ENABLED=$(getcfg $QPKG_NAME Enable -u -d FALSE -f $CONF)
         if [ "$ENABLED" != "TRUE" ]; then
             echo "$QPKG_NAME is disabled."
+            exit 1
+        fi
+        if [ ! -x "$DOCKER" ]; then
+            echo "ERROR: Docker not found. Install Container Station first."
             exit 1
         fi
         if [ ! -f "${ENV_FILE}" ]; then

@@ -64,8 +64,8 @@ def _build_mcp() -> tuple[FastMCP, BearerTokenVerifier | None]:
         verifier = BearerTokenVerifier()
         base_url = f"http://{host}:{port}"
         auth = AuthSettings(
-            issuer_url=base_url,
-            resource_server_url=base_url,
+            issuer_url=base_url,  # type: ignore[arg-type]
+            resource_server_url=base_url,  # type: ignore[arg-type]
         )
         return FastMCP(
             "qnap-qvs", host=host, port=port,
