@@ -481,7 +481,8 @@ async def get_overview() -> str:
     """Get a summary dashboard of all VMs and resource usage.
 
     Returns: VM count, running/stopped breakdown, total vCPUs, memory,
-    disk provisioned vs actual usage, and per-VM summary.
+    disk provisioned vs actual usage, per-VM summary with networking
+    (adapters, MACs, IPs for running VMs).
     """
     try:
         client = await _get_client()
@@ -499,12 +500,37 @@ async def get_overview() -> str:
         total_disk = sum(d.get("size", 0) for v in vms for d in v.get("disks", []))
         actual_disk = sum(d.get("actual_size", 0) for v in vms for d in v.get("disks", []))
 
+        # Fetch IPs for running VMs (best-effort, requires guest agent)
+        vm_ips: dict[int, list] = {}
+        for v in running:
+            try:
+                ip_result = await client.get_vm_ips(str(v["id"]))
+                if ip_result.get("status") == 0:
+                    vm_ips[v["id"]] = ip_result.get("data", [])
+            except QVSError:
+                pass
+
         vm_summaries = []
         for v in vms:
             disks = v.get("disks", [])
             disk_total = sum(d.get("size", 0) for d in disks)
             disk_actual = sum(d.get("actual_size", 0) for d in disks)
-            vm_summaries.append({
+
+            # Build network adapter summaries
+            adapters = []
+            for a in v.get("adapters", []):
+                adapters.append({
+                    "id": a.get("id"),
+                    "mac": a.get("mac"),
+                    "model": a.get("model"),
+                    "bridge": a.get("bridge"),
+                    "type": a.get("type"),
+                })
+
+            # Include IPs if available
+            ips = vm_ips.get(v["id"])
+
+            summary: dict = {
                 "id": v["id"],
                 "name": v["name"],
                 "state": v.get("power_state"),
@@ -514,11 +540,17 @@ async def get_overview() -> str:
                 "auto_start": v.get("auto_start"),
                 "disk_provisioned_gb": round(disk_total / 1024 / 1024 / 1024, 1),
                 "disk_actual_gb": round(disk_actual / 1024 / 1024 / 1024, 1),
-                "nics": len(v.get("adapters", [])),
                 "snapshots_size_gb": round(
                     sum(d.get("snapshots_size", 0) for d in disks) / 1024 / 1024 / 1024, 1
                 ),
-            })
+                "network": {
+                    "adapters": adapters,
+                    "ips": ips if ips else (
+                        "not running" if v.get("power_state") != "running" else "guest agent required"
+                    ),
+                },
+            }
+            vm_summaries.append(summary)
 
         overview = {
             "total_vms": len(vms),
