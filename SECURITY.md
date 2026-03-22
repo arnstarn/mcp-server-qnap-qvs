@@ -5,7 +5,7 @@
 If you discover a security vulnerability in this project, please report it responsibly:
 
 1. **Do NOT open a public GitHub issue**
-2. Email: security@mcp-server-qnap-qvs.dev
+2. Open a [private security advisory](https://github.com/arnstarn/mcp-server-qnap-qvs/security/advisories/new) on this repo
 3. Include details of the vulnerability and steps to reproduce
 
 I will respond within 72 hours and work with you on a fix.
