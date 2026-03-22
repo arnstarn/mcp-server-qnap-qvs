@@ -146,6 +146,49 @@ class QVSClient:
 
         return response.json()
 
+    # ── Host Info (QTS API) ─────────────────────────────────────────
+
+    async def get_host_resources(self) -> dict[str, Any]:
+        """Get host CPU and memory info from QTS sysinfo API."""
+        assert self._client is not None
+        response = await self._client.get(
+            "/cgi-bin/management/manaRequest.cgi",
+            params={"sid": self._cookies.get("NAS_SID", ""), "subfunc": "sysinfo"},
+        )
+        if response.status_code != 200:
+            return {}
+
+        text = response.text
+        result: dict[str, Any] = {}
+
+        patterns = {
+            "cpu_model": r"<cpu_model><!\[CDATA\[(.+?)\]\]></cpu_model>",
+            "cpu_usage_percent": r"<cpu_usage><!\[CDATA\[(.+?)\]\]></cpu_usage>",
+            "total_memory_mb": r"<total_memory><!\[CDATA\[(.+?)\]\]></total_memory>",
+            "free_memory_mb": r"<free_memory><!\[CDATA\[(.+?)\]\]></free_memory>",
+        }
+        for key, pattern in patterns.items():
+            match = re.search(pattern, text)
+            if match:
+                val = match.group(1)
+                if key in ("total_memory_mb", "free_memory_mb"):
+                    result[key] = round(float(val))
+                elif key == "cpu_usage_percent":
+                    result[key] = float(val.replace(" %", "").strip())
+                else:
+                    result[key] = val
+
+        # Extract CPU core count from model string (e.g. "Quad-core" -> 4)
+        cpu_model = result.get("cpu_model", "")
+        core_words = {"Dual": 2, "Quad": 4, "Hexa": 6, "Octa": 8}
+        for word, count in core_words.items():
+            if word in cpu_model:
+                result["cpu_cores"] = count
+                result["cpu_threads"] = count * 2  # SMT
+                break
+
+        return result
+
     # ── VM Operations ─────────────────────────────────────────────
 
     async def list_vms(self) -> dict[str, Any]:

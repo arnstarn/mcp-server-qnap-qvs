@@ -488,6 +488,7 @@ async def get_overview() -> str:
         client = await _get_client()
         result = await client.list_vms()
         vms = result.get("data", [])
+        host = await client.get_host_resources()
 
         running = [v for v in vms if v.get("power_state") == "running"]
         stopped = [v for v in vms if v.get("power_state") == "stop"]
@@ -552,19 +553,52 @@ async def get_overview() -> str:
             }
             vm_summaries.append(summary)
 
+        # Build resource summary with host totals and utilization %
+        host_threads = host.get("cpu_threads", 0)
+        host_mem_mb = host.get("total_memory_mb", 0)
+        host_free_mb = host.get("free_memory_mb", 0)
+        alloc_mem_mb = total_mem // 1024 // 1024
+        active_mem_mb = active_mem // 1024 // 1024
+
+        resources: dict = {
+            "vcpus_allocated": total_cores,
+            "vcpus_active": active_cores,
+            "memory_allocated_mb": alloc_mem_mb,
+            "memory_active_mb": active_mem_mb,
+            "disk_provisioned_gb": round(total_disk / 1024 / 1024 / 1024, 1),
+            "disk_actual_gb": round(actual_disk / 1024 / 1024 / 1024, 1),
+        }
+
+        if host:
+            resources["host"] = {
+                "cpu_model": host.get("cpu_model"),
+                "cpu_cores": host.get("cpu_cores"),
+                "cpu_threads": host_threads,
+                "cpu_usage_percent": host.get("cpu_usage_percent"),
+                "total_memory_mb": host_mem_mb,
+                "free_memory_mb": host_free_mb,
+                "used_memory_mb": host_mem_mb - host_free_mb,
+            }
+            if host_threads > 0:
+                resources["utilization"] = {
+                    "vcpu_allocated_pct": round(total_cores / host_threads * 100, 1),
+                    "vcpu_active_pct": round(active_cores / host_threads * 100, 1),
+                }
+            if host_mem_mb > 0:
+                resources["utilization"] = resources.get("utilization", {})
+                resources["utilization"]["memory_allocated_pct"] = round(
+                    alloc_mem_mb / host_mem_mb * 100, 1
+                )
+                resources["utilization"]["memory_active_pct"] = round(
+                    active_mem_mb / host_mem_mb * 100, 1
+                )
+
         overview = {
             "total_vms": len(vms),
             "running": len(running),
             "stopped": len(stopped),
             "other": len(other),
-            "resources": {
-                "vcpus_allocated": total_cores,
-                "vcpus_active": active_cores,
-                "memory_allocated_mb": total_mem // 1024 // 1024,
-                "memory_active_mb": active_mem // 1024 // 1024,
-                "disk_provisioned_gb": round(total_disk / 1024 / 1024 / 1024, 1),
-                "disk_actual_gb": round(actual_disk / 1024 / 1024 / 1024, 1),
-            },
+            "resources": resources,
             "vms": vm_summaries,
         }
         return _json(overview)
