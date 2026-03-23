@@ -279,6 +279,48 @@ def render_login(message: str = "", is_setup: bool = False) -> str:
 </div></body></html>"""
 
 
+def render_change_password(message: str = "", msg_type: str = "info") -> str:
+    """Render the change password page."""
+    msg_html = ""
+    if message:
+        msg_html = (
+            f'<div class="message message-{msg_type}">'
+            f"{html.escape(message)}</div>"
+        )
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP QVS Server — Change Password</title>
+<style>{CSS}</style></head>
+<body><div class="container">
+<h1>MCP QVS Server</h1>
+<p class="subtitle">Change Config UI Password</p>
+{msg_html}
+<div class="card">
+<form method="POST" action="/change-password">
+<div class="field">
+    <label>Current Password</label>
+    <input type="password" name="current" class="input"
+           required placeholder="Current password">
+</div>
+<div class="field">
+    <label>New Password</label>
+    <input type="password" name="password" class="input"
+           required placeholder="New password (min 6 characters)">
+</div>
+<div class="field">
+    <label>Confirm New Password</label>
+    <input type="password" name="confirm" class="input"
+           required placeholder="Confirm new password">
+</div>
+<div class="actions">
+    <a href="/" class="btn">Cancel</a>
+    <button type="submit" class="btn btn-primary">Change Password</button>
+</div>
+</form></div>
+</div></body></html>"""
+
+
 def read_env() -> dict[str, str]:
     values: dict[str, str] = {}
     try:
@@ -442,10 +484,16 @@ Claude Desktop config:</p>
 <div class="copy-block">
 <button type="button" class="btn btn-sm" onclick="copyConfig()">Copy</button>
 <div class="client-config" id="clientConfig"></div></div></div>
-<div class="setup-info"><h2>Need Help?</h2><p>
+<div class="setup-info"><h2>Account &amp; Help</h2>
+<p style="display:flex; gap:16px; flex-wrap:wrap;">
+<a href="/change-password" style="color: #58a6ff;">Change Config UI Password</a>
+<a href="/logout" style="color: #58a6ff;">Logout</a>
 <a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
-style="color: #58a6ff;" target="_blank">GitHub Repository</a> —
-documentation, troubleshooting, and source code.</p></div>
+style="color: #58a6ff;" target="_blank">GitHub Repository</a></p>
+<p style="color: #6e7681; font-size: 11px; margin-top: 8px;">
+Forgot your password? SSH into the NAS and delete the password file:<br>
+<code>rm $(getcfg mcp-server-qnap-qvs Install_Path -f /etc/config/qpkg.conf)/.ui_password</code>
+</p></div>
 </div>
 <script>{JS_MAIN}</script>
 </body></html>"""
@@ -604,6 +652,9 @@ class ConfigHandler(http.server.BaseHTTPRequestHandler):
             )
             self.end_headers()
             return
+        if self.path == "/change-password":
+            self._html_response(render_change_password())
+            return
         values = read_env()
         self._html_response(render_form(values))
 
@@ -650,6 +701,41 @@ class ConfigHandler(http.server.BaseHTTPRequestHandler):
                     self.end_headers()
                 else:
                     self._html_response(render_login("Incorrect password."))
+            return
+
+        if self.path == "/change-password":
+            if not self._require_auth():
+                return
+            current = values.get("current", "")
+            new_pw = values.get("password", "")
+            confirm = values.get("confirm", "")
+            if not _check_ui_password(current):
+                self._html_response(render_change_password(
+                    "Current password is incorrect.", "error"
+                ))
+                return
+            if len(new_pw) < 6:
+                self._html_response(render_change_password(
+                    "New password must be at least 6 characters.", "error"
+                ))
+                return
+            if new_pw != confirm:
+                self._html_response(render_change_password(
+                    "New passwords do not match.", "error"
+                ))
+                return
+            _save_ui_password(new_pw)
+            # Set new session cookie
+            with open(UI_PASSWORD_FILE) as f:
+                stored = f.read().strip()
+            token = _make_session_token(stored)
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header(
+                "Set-Cookie",
+                f"mcp_qvs_session={token}; Path=/; HttpOnly; SameSite=Strict",
+            )
+            self.end_headers()
             return
 
         if not self._require_auth():
