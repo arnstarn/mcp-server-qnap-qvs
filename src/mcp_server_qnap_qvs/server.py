@@ -582,7 +582,84 @@ async def export_vm(vm_id: str, path: str, confirm: bool = False) -> str:
         return _json({"error": str(e)})
 
 
-# ── VM Update / Delete ───────────────────────────────────────────
+# ── VM Create / Update / Delete ───────────────────────────────────
+
+
+@mcp.tool()
+async def create_vm(
+    name: str,
+    cores: int = 2,
+    memory_mb: int = 2048,
+    disk_size_gb: int = 20,
+    os_type: str = "ubuntujammy",
+    bios: str = "ovmf",
+    auto_start: str = "off",
+    confirm: bool = False,
+) -> str:
+    """DESTRUCTIVE: Create a new virtual machine.
+
+    Creates a VM with the specified resources. Common os_type values:
+    ubuntujammy, ubuntunoble, debian12, centos9, win11, win2022, generic.
+
+    BIOS options: 'ovmf' (UEFI, recommended) or 'seabios' (legacy).
+
+    Args:
+        name: Name for the new VM
+        cores: Number of vCPU cores (default 2)
+        memory_mb: Memory in MB (default 2048)
+        disk_size_gb: Disk size in GB (default 20)
+        os_type: Guest OS type (default ubuntujammy)
+        bios: BIOS type — 'ovmf' (UEFI) or 'seabios' (legacy). Default ovmf.
+        auto_start: Auto-start policy — 'on', 'off', or 'last'. Default off.
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    memory = memory_mb * 1024 * 1024
+    disk_size = disk_size_gb * 1024 * 1024 * 1024
+
+    if not confirm:
+        return _json({
+            "warning": (
+                f"This will create a new VM '{name}' with {cores} cores, "
+                f"{memory_mb}MB RAM, {disk_size_gb}GB disk, OS type '{os_type}'. "
+                "Set confirm=true to proceed."
+            ),
+            "action": "create_vm",
+            "name": name,
+            "cores": cores,
+            "memory_mb": memory_mb,
+            "disk_size_gb": disk_size_gb,
+            "os_type": os_type,
+            "bios": bios,
+        })
+    try:
+        client = await _get_client()
+        result = await client.create_vm(
+            name=name,
+            cores=cores,
+            memory=memory,
+            os_type=os_type,
+            bios=bios,
+            auto_start=auto_start,
+            arch="x86",
+            cpu_model="Opteron_G2",
+            video_type="qxl",
+            boot_order="hd",
+            usb="3",
+            disks=[{
+                "size": disk_size,
+                "format": "qcow2",
+                "bus": "virtio",
+                "cache": "writeback",
+            }],
+            adapters=[{
+                "model": "virtio",
+                "type": "bridge",
+                "bridge": "qvs0",
+            }],
+        )
+        return _json({"action": "create_vm", "name": name, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
 
 
 @mcp.tool()

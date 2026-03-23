@@ -195,6 +195,10 @@ class QVSClient:
         """List all virtual machines."""
         return await self._request("GET", "/qvs/vms")
 
+    async def create_vm(self, **fields: Any) -> dict[str, Any]:
+        """Create a new VM."""
+        return await self._request("POST", "/qvs/vms", json=fields)
+
     async def get_vm(self, vm_id: str) -> dict[str, Any]:
         """Get details of a specific VM."""
         return await self._request("GET", f"/qvs/vms/{vm_id}")

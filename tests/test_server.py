@@ -22,6 +22,7 @@ def test_tools_registered():
         "get_overview",
         "get_stopping_progress",
         # VM CRUD
+        "create_vm",
         "update_vm",
         "delete_vm",
         "clone_vm",
