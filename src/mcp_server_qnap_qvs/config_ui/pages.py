@@ -373,7 +373,6 @@ def render_review(values: dict[str, str], ok: bool, msg: str, user: str = "") ->
 
 
 def render_success(values: dict[str, str], user: str = "") -> str:
-    token = html.escape(values.get("MCP_AUTH_TOKEN", ""))
     body = f"""
 <h1>Setup Complete</h1>
 <div class="msg msg-ok">Settings saved. The MCP server is restarting.</div>
@@ -382,19 +381,12 @@ def render_success(values: dict[str, str], user: str = "") -> str:
 <div class="step-t">The MCP server will be ready in a few seconds on port
 <strong>{MCP_PORT}</strong>.</div></div>
 <div class="step"><div class="step-n">2</div>
-<div class="step-t">Copy the client configuration below.</div></div></div>
-<div class="card"><h2>MCP Client Configuration</h2>
-<div class="copy-block">
-<button type="button" class="btn btn-sm" onclick="copyConfig()">Copy</button>
-<div class="mono" id="clientConfig"></div></div></div>
-<script>
-function copyConfig(){{
-navigator.clipboard.writeText(document.getElementById('clientConfig').textContent)}}
-var h=window.location.hostname;
-document.getElementById('clientConfig').textContent=JSON.stringify({{
-mcpServers:{{"qnap-qvs":{{url:"http://"+h+":{MCP_PORT}/sse",
-headers:{{Authorization:"Bearer {token}"}},transportType:"sse"}}}}}},null,2);
-</script>"""
+<div class="step-t">Go to <strong>Settings</strong> to view client configuration
+for Claude Code, Claude Desktop, VS Code, Cursor, and other MCP clients.</div></div>
+</div>
+<div class="actions">
+<a href="{B}/settings" class="btn btn-primary">Go to Settings</a>
+</div>"""
     return _page("Complete", "Settings", body, user)
 
 
