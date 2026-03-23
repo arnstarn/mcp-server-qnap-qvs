@@ -10,6 +10,28 @@ COMPOSE="$DOCKER compose"
 COMPOSE_FILE="${QPKG_DIR}/docker-compose.yml"
 ENV_FILE="${QPKG_DIR}/.env"
 
+# Read optional Docker registry credentials from .env
+docker_login() {
+    if [ -f "${ENV_FILE}" ]; then
+        REGISTRY=$(grep '^DOCKER_REGISTRY=' "${ENV_FILE}" | cut -d= -f2-)
+        USERNAME=$(grep '^DOCKER_USERNAME=' "${ENV_FILE}" | cut -d= -f2-)
+        PASSWORD=$(grep '^DOCKER_PASSWORD=' "${ENV_FILE}" | cut -d= -f2-)
+        if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
+            echo "Logging into registry ${REGISTRY:-ghcr.io}..."
+            echo "$PASSWORD" | $DOCKER login "${REGISTRY:-ghcr.io}" -u "$USERNAME" --password-stdin 2>/dev/null
+        fi
+    fi
+}
+
+# Get the configured image name
+get_image() {
+    if [ -f "${ENV_FILE}" ]; then
+        IMG=$(grep '^DOCKER_IMAGE=' "${ENV_FILE}" | cut -d= -f2-)
+    fi
+    REGISTRY=$(grep '^DOCKER_REGISTRY=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)
+    echo "${REGISTRY:-ghcr.io}/${IMG:-arnstarn/mcp-server-qnap-qvs:latest}"
+}
+
 case "$1" in
     start)
         ENABLED=$(getcfg $QPKG_NAME Enable -u -d FALSE -f $CONF)
@@ -23,11 +45,13 @@ case "$1" in
         fi
         if [ ! -f "${ENV_FILE}" ]; then
             echo "ERROR: ${ENV_FILE} not found."
-            echo "Copy .env.example to .env and configure your QNAP credentials."
+            echo "Open the app to configure credentials."
             exit 1
         fi
         echo "Starting ${QPKG_NAME}..."
-        $DOCKER pull ghcr.io/arnstarn/mcp-server-qnap-qvs:latest 2>/dev/null
+        docker_login
+        IMAGE=$(get_image)
+        $DOCKER pull "$IMAGE" 2>/dev/null || echo "Pull failed — using cached image"
         cd "${QPKG_DIR}" && $COMPOSE -f "${COMPOSE_FILE}" up -d
         ;;
     stop)

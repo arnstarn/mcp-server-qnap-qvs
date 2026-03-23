@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from .constants import ENV_FILE, FIELDS, LOG_FILE, MCP_PORT, START_TIME
+from .constants import ENV_FILE, FIELDS, LOG_FILE, MCP_PORT, REGISTRY_FIELDS, START_TIME
 
 
 def read_env() -> dict[str, str]:
@@ -30,6 +30,14 @@ def write_env(values: dict[str, str]) -> None:
     with open(ENV_FILE, "w") as f:
         for key, _, default, _ in FIELDS:
             f.write(f"{key}={values.get(key, default)}\n")
+        # Write registry fields if any are set
+        has_registry = any(values.get(k) for k, _, _, _ in REGISTRY_FIELDS)
+        if has_registry:
+            f.write("\n# Docker registry (optional)\n")
+            for key, _, default, _ in REGISTRY_FIELDS:
+                val = values.get(key, default)
+                if val:
+                    f.write(f"{key}={val}\n")
 
 
 def check_port(port: int = MCP_PORT) -> bool:

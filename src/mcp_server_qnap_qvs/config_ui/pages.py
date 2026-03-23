@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 
-from .constants import FIELDS, MCP_PORT, VERSION
+from .constants import FIELDS, MCP_PORT, REGISTRY_FIELDS, VERSION
 from .helpers import check_port, read_env, read_log, test_qnap, uptime
 from .styles import CSS
 
@@ -140,6 +140,27 @@ def render_settings(values: dict[str, str], msg: str = "", mt: str = "info", use
     test_btn = ('<button type="button" class="btn" '
                 'onclick="testConnection()">Test Connection</button>')
 
+    # Build registry fields
+    reg_rows = ""
+    for key, label, default, hint_text in REGISTRY_FIELDS:
+        val = html.escape(values.get(key, default))
+        if "PASSWORD" in key:
+            sid = f"show_{key}"
+            inp = (
+                f'<input type="password" name="{key}" value="{val}" '
+                f'class="input" id="field_{key}">'
+                f'<button type="button" class="btn btn-sm" id="{sid}" '
+                f"onclick=\"toggleVis('{key}','{sid}')\">Show</button>"
+            )
+        else:
+            inp = (
+                f'<input type="text" name="{key}" value="{val}" '
+                f'class="input" id="field_{key}">'
+            )
+        reg_rows += f"""<div class="field"><label>{html.escape(label)}</label>
+<div class="input-row">{inp}</div>
+<div class="hint">{html.escape(hint_text)}</div></div>"""
+
     body = f"""
 <h1>Settings</h1>
 <p class="subtitle">QNAP credentials and MCP auth token</p>
@@ -147,6 +168,12 @@ def render_settings(values: dict[str, str], msg: str = "", mt: str = "info", use
 <div id="testResult"></div>
 <form method="POST" action="/validate">
 <div class="card"><h2>QNAP Connection</h2>{rows}</div>
+<details class="card" style="cursor:pointer">
+<summary><h2 style="display:inline;cursor:pointer">Docker Registry (Optional)</h2>
+<span class="hint" style="margin-left:8px">
+Only needed if image pulls hit rate limits</span></summary>
+<div style="margin-top:12px">{reg_rows}</div>
+</details>
 <div class="actions">{reset}{test_btn}
 <button type="submit" class="btn btn-primary">Save</button>
 </div></form>

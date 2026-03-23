@@ -35,3 +35,15 @@ FIELDS = [
     ("MCP_AUTH_TOKEN", "MCP Auth Token", "",
      "Secret token for MCP clients. Click Generate or enter your own."),
 ]
+
+# Optional Docker registry fields (separate section in the UI)
+REGISTRY_FIELDS = [
+    ("DOCKER_REGISTRY", "Registry", "ghcr.io",
+     "Container registry. Default: ghcr.io. Use docker.io for Docker Hub."),
+    ("DOCKER_IMAGE", "Image", "arnstarn/mcp-server-qnap-qvs:latest",
+     "Docker image name and tag."),
+    ("DOCKER_USERNAME", "Registry Username", "",
+     "Optional. Only needed if anonymous pulls hit rate limits."),
+    ("DOCKER_PASSWORD", "Registry Password / Token", "",
+     "Optional. Personal access token (GHCR) or password (Docker Hub)."),
+]
