@@ -375,18 +375,51 @@ def render_review(values: dict[str, str], ok: bool, msg: str, user: str = "") ->
 def render_success(values: dict[str, str], user: str = "") -> str:
     body = f"""
 <h1>Setup Complete</h1>
-<div class="msg msg-ok">Settings saved. The MCP server is restarting.</div>
-<div class="card"><h2>What's Next</h2>
-<div class="step"><div class="step-n">1</div>
-<div class="step-t">The MCP server will be ready in a few seconds on port
-<strong>{MCP_PORT}</strong>.</div></div>
-<div class="step"><div class="step-n">2</div>
-<div class="step-t">Go to <strong>Settings</strong> to view client configuration
-for Claude Code, Claude Desktop, VS Code, Cursor, and other MCP clients.</div></div>
+<div class="msg msg-ok">Settings saved.</div>
+<div class="card" id="restartCard">
+<h2>Restarting Server</h2>
+<div id="restartStatus">
+<p style="color:#8b949e">
+<span class="dot dot-yellow"></span>
+The server is restarting with your new settings. Please wait...</p>
 </div>
-<div class="actions">
+</div>
+<div class="actions" id="nextActions" style="display:none">
 <a href="{B}/settings" class="btn btn-primary">Go to Settings</a>
-</div>"""
+</div>
+<script>
+var attempts=0;
+var maxAttempts=30;
+function checkServer(){{
+attempts++;
+fetch('{B}/api/health',{{method:'GET'}}).then(function(r){{
+if(r.ok){{
+document.getElementById('restartStatus').innerHTML=
+'<p><span class="dot dot-green"></span>Server is running.</p>'+
+'<div class="step" style="margin-top:12px"><div class="step-n">1</div>'+
+'<div class="step-t">Go to <strong>Settings</strong> to view client '+
+'configuration for Claude Code, Claude Desktop, VS Code, Cursor, '+
+'and other MCP clients.</div></div>';
+document.getElementById('nextActions').style.display='flex';
+}}else{{retry()}}
+}}).catch(function(){{retry()}})
+}}
+function retry(){{
+if(attempts<maxAttempts){{
+document.getElementById('restartStatus').innerHTML=
+'<p style="color:#8b949e"><span class="dot dot-yellow"></span>'+
+'Waiting for server... ('+attempts+'/'+maxAttempts+')</p>';
+setTimeout(checkServer,3000)
+}}else{{
+document.getElementById('restartStatus').innerHTML=
+'<p><span class="dot dot-red"></span>'+
+'Server did not respond after '+maxAttempts+' attempts. '+
+'Try restarting the app from the QNAP App Center (Stop then Start).</p>';
+document.getElementById('nextActions').style.display='flex';
+}}
+}}
+setTimeout(checkServer,5000);
+</script>"""
     return _page("Complete", "Settings", body, user)
 
 
