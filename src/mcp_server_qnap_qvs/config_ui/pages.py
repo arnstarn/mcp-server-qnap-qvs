@@ -43,7 +43,10 @@ def render_dashboard(user: str = "") -> str:
     env = read_env()
     mcp_up = check_port()
     qnap_ok, qnap_msg = (False, "Not configured")
-    if env.get("QNAP_HOST") and env.get("QNAP_USERNAME"):
+    pw = env.get("QNAP_PASSWORD", "")
+    has_real_creds = (env.get("QNAP_HOST") and env.get("QNAP_USERNAME")
+                      and pw and pw != "your-password-here")
+    if has_real_creds:
         qnap_ok, qnap_msg = test_qnap(env)
 
     mcp_dot = "dot-green" if mcp_up else "dot-red"
