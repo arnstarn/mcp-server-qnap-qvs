@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import html
 
-from .constants import FIELDS, MCP_PORT, REGISTRY_FIELDS, VERSION
+from .constants import FIELDS, MCP_PORT, REGISTRY_FIELDS, UI_BASE_PATH, VERSION
 from .helpers import check_port, read_env, read_log, test_qnap, uptime
 from .styles import CSS
+
+B = UI_BASE_PATH  # Short alias for use in templates
 
 
 def _nav(active: str, user: str = "") -> str:
     items = [
-        ("Dashboard", "/"), ("Settings", "/settings"), ("Logs", "/logs"),
+        ("Dashboard", f"{B}/"), ("Settings", f"{B}/settings"), ("Logs", f"{B}/logs"),
     ]
     links = ""
     for label, href in items:
@@ -20,7 +22,7 @@ def _nav(active: str, user: str = "") -> str:
     user_html = f'<span class="ver">{html.escape(user)}</span>' if user else ""
     return f"""<div class="nav">{links}<div class="spacer"></div>
 {user_html}<span class="ver">v{VERSION}</span>
-<a href="/logout">Logout</a></div>"""
+<a href="{B}/logout">Logout</a></div>"""
 
 
 def _page(title: str, nav_active: str, body: str, user: str = "") -> str:
@@ -85,7 +87,7 @@ def render_dashboard(user: str = "") -> str:
 <tr><td>Version</td><td>{VERSION}</td></tr>
 </table>
 <div class="actions">
-<a href="/settings" class="btn btn-primary">Edit Settings</a>
+<a href="{B}/settings" class="btn btn-primary">Edit Settings</a>
 </div></div>
 <div class="card">
 <h2>Updates</h2>
@@ -97,7 +99,7 @@ def render_dashboard(user: str = "") -> str:
 function checkUpdate(){{
 var el=document.getElementById('updateStatus');
 el.innerHTML='<span class="hint">Checking...</span>';
-fetch('/api/check-update').then(function(r){{return r.json()}}).then(function(d){{
+fetch('{B}/api/check-update').then(function(r){{return r.json()}}).then(function(d){{
 if(d.error){{el.innerHTML='<div class="msg msg-err">'+d.error+'</div>';return}}
 if(d.update_available){{
 el.innerHTML='<div class="msg msg-info">Update available: <strong>v'+d.latest+
@@ -112,7 +114,7 @@ el.innerHTML='<div class="msg msg-ok">You are running the latest version (v'+d.c
 function doUpdate(){{
 var el=document.getElementById('updateStatus');
 el.innerHTML='<div class="msg msg-info">Pulling latest image and restarting... this may take a minute.</div>';
-fetch('/api/update',{{method:'POST'}}).then(function(r){{return r.json()}}).then(function(d){{
+fetch('{B}/api/update',{{method:'POST'}}).then(function(r){{return r.json()}}).then(function(d){{
 if(d.ok){{
 el.innerHTML='<div class="msg msg-ok">'+d.message+' The page will reload shortly.</div>';
 setTimeout(function(){{location.reload()}},10000)
@@ -170,7 +172,7 @@ def render_settings(values: dict[str, str], msg: str = "", mt: str = "info", use
         msg_html = ('<div class="msg msg-ok">Configuration loaded. '
                     "Update fields and Save, or Reset to start fresh.</div>")
 
-    reset = '<a href="/reset" class="btn btn-danger">Reset</a>' if has_cfg else ""
+    reset = f'<a href="{B}/reset" class="btn btn-danger">Reset</a>' if has_cfg else ""
     test_btn = ('<button type="button" class="btn" '
                 'onclick="testConnection()">Test Connection</button>')
 
@@ -200,7 +202,7 @@ def render_settings(values: dict[str, str], msg: str = "", mt: str = "info", use
 <p class="subtitle">QNAP credentials and MCP auth token</p>
 {msg_html}
 <div id="testResult"></div>
-<form method="POST" action="/validate">
+<form method="POST" action="{B}/validate">
 <div class="card"><h2>QNAP Connection</h2>{rows}</div>
 <details class="card" style="cursor:pointer">
 <summary><h2 style="display:inline;cursor:pointer">Docker Registry (Optional)</h2>
@@ -260,7 +262,7 @@ onclick="copyEl('cfgVscode')">Copy</button>
 </div>
 <div class="card"><h2>Help</h2>
 <p style="display:flex;gap:16px;flex-wrap:wrap">
-<a href="/logout" style="color:#58a6ff">Logout</a>
+<a href="{B}/logout" style="color:#58a6ff">Logout</a>
 <a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
 style="color:#58a6ff" target="_blank">GitHub</a></p>
 </div>
@@ -312,7 +314,7 @@ var r=document.getElementById('testResult');
 r.innerHTML='<div class="msg msg-info">Testing connection...</div>';
 var fd=new FormData(document.querySelector('form'));
 var p=new URLSearchParams(fd).toString();
-fetch('/api/test-connection',{{method:'POST',
+fetch('{B}/api/test-connection',{{method:'POST',
 headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:p}})
 .then(function(x){{return x.json()}}).then(function(d){{
 var cls=d.ok?'msg-ok':'msg-err';
@@ -340,15 +342,15 @@ def render_review(values: dict[str, str], ok: bool, msg: str, user: str = "") ->
             for k, v in values.items()
         )
         buttons = f"""<div class="actions">
-<a href="/settings" class="btn">Edit</a>
-<form method="POST" action="/confirm" style="display:inline">
+<a href="{B}/settings" class="btn">Edit</a>
+<form method="POST" action="{B}/confirm" style="display:inline">
 {hidden}
 <button type="submit" class="btn btn-primary">Confirm &amp; Restart</button>
 </form></div>"""
         mc = "msg-ok"
     else:
-        buttons = ('<div class="actions">'
-                   '<a href="/settings" class="btn btn-primary">Go Back</a></div>')
+        buttons = (f'<div class="actions">'
+                   f'<a href="{B}/settings" class="btn btn-primary">Go Back</a></div>')
         mc = "msg-err"
 
     body = f"""
@@ -410,7 +412,7 @@ def render_login(msg: str = "") -> str:
 <p class="subtitle" style="text-align:center">{title}</p>
 {msg_html}
 <div class="card"><p class="hint" style="margin-bottom:12px">{info}</p>
-<form method="POST" action="/login">
+<form method="POST" action="{B}/login">
 <div class="field"><label>Username</label>
 <input type="text" name="username" class="input" required autofocus></div>
 <div class="field"><label>Password</label>
@@ -450,7 +452,7 @@ align-self:center"></div>
 <div class="card"><h2>Step 1: QNAP Connection</h2>
 <p class="hint" style="margin-bottom:12px">Enter the credentials you use
 to log into the QNAP web UI.</p>
-<form method="POST" action="/wizard/1">
+<form method="POST" action="{B}/wizard/1">
 <div class="field"><label>QNAP Host</label>
 <input type="text" name="QNAP_HOST" value="{hv}" class="input"
 id="field_QNAP_HOST" placeholder="localhost"></div>
@@ -479,7 +481,7 @@ id="field_QNAP_HOST" placeholder="localhost"></div>
 <p class="hint" style="margin-bottom:12px">
 This token is a shared secret between the server and your AI client.
 Click Generate to create one.</p>
-<form method="POST" action="/wizard/2">{hidden}
+<form method="POST" action="{B}/wizard/2">{hidden}
 <div class="field"><label>Auth Token</label>
 <div class="input-row">
 <input type="text" name="MCP_AUTH_TOKEN" value="{tv}"

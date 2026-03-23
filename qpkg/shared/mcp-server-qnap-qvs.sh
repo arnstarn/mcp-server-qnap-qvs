@@ -9,6 +9,8 @@ DOCKER="${CS_DIR}/bin/docker"
 COMPOSE="$DOCKER compose"
 COMPOSE_FILE="${QPKG_DIR}/docker-compose.yml"
 ENV_FILE="${QPKG_DIR}/.env"
+PROXY_CONF="/etc/container-proxy.d/${QPKG_NAME}"
+PROXY_PATH="/mcp-qvs"
 
 # Read optional Docker registry credentials from .env
 docker_login() {
@@ -30,6 +32,26 @@ get_image() {
     fi
     REGISTRY=$(grep '^DOCKER_REGISTRY=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)
     echo "${REGISTRY:-ghcr.io}/${IMG:-arnstarn/mcp-server-qnap-qvs:latest}"
+}
+
+# Set up HTTPS reverse proxy through QNAP's Apache+stunnel
+setup_proxy() {
+    mkdir -p /etc/container-proxy.d
+    cat > "${PROXY_CONF}" << EOF
+ProxyRequests off
+ProxyPass ${PROXY_PATH} http://127.0.0.1:8446
+ProxyPassReverse ${PROXY_PATH} http://127.0.0.1:8446
+EOF
+    /etc/init.d/thttpd.sh reload 2>/dev/null
+    /etc/init.d/stunnel.sh reload 2>/dev/null
+    echo "HTTPS proxy configured: https://$(hostname):443${PROXY_PATH}/"
+}
+
+# Remove HTTPS reverse proxy
+remove_proxy() {
+    rm -f "${PROXY_CONF}"
+    /etc/init.d/thttpd.sh reload 2>/dev/null
+    /etc/init.d/stunnel.sh reload 2>/dev/null
 }
 
 case "$1" in
@@ -54,6 +76,9 @@ case "$1" in
         $DOCKER pull "$IMAGE" 2>/dev/null || echo "Pull failed — using cached image"
         cd "${QPKG_DIR}" && $COMPOSE -f "${COMPOSE_FILE}" up -d
 
+        # Set up HTTPS proxy for config UI
+        setup_proxy
+
         # Sync QPKG version in App Center with the running container version
         NEW_VER=$($DOCKER exec $QPKG_NAME python3 -c "from mcp_server_qnap_qvs import __version__; print(__version__)" 2>/dev/null)
         if [ -n "$NEW_VER" ]; then
@@ -66,6 +91,7 @@ case "$1" in
         ;;
     stop)
         echo "Stopping ${QPKG_NAME}..."
+        remove_proxy
         cd "${QPKG_DIR}" && $COMPOSE -f "${COMPOSE_FILE}" down 2>/dev/null
         ;;
     restart)

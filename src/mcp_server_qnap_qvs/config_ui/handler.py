@@ -18,7 +18,7 @@ from .auth import (
     session_cookie,
     store_session,
 )
-from .constants import ENV_FILE, VERSION
+from .constants import ENV_FILE, UI_BASE_PATH, VERSION
 from .helpers import check_latest_version, read_env, test_qnap, write_env
 from .pages import (
     render_dashboard,
@@ -32,6 +32,15 @@ from .pages import (
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    def _strip_base(self, path: str) -> str:
+        """Strip the base path prefix from the request path."""
+        p = path.split("?")[0]
+        if UI_BASE_PATH and p.startswith(UI_BASE_PATH):
+            p = p[len(UI_BASE_PATH):]
+        if not p or p == "":
+            p = "/"
+        return p
+
     def _get_user(self) -> str | None:
         """Return logged-in username or None."""
         return get_session(self.headers.get("Cookie", ""))
@@ -45,12 +54,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return None
 
     def do_GET(self) -> None:
-        p = self.path.split("?")[0]
+        p = self._strip_base(self.path)
 
         if p == "/login":
             # If already logged in, redirect to dashboard
             if self._get_user():
-                self._redirect("/")
+                self._redirect(f"{UI_BASE_PATH}/")
                 return
             self._html(render_login())
             return
@@ -58,7 +67,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if p == "/logout":
             clear_session(self.headers.get("Cookie", ""))
             self.send_response(302)
-            self.send_header("Location", "/login")
+            self.send_header("Location", f"{UI_BASE_PATH}/login")
             self.send_header("Set-Cookie", clear_cookie())
             self.end_headers()
             return
@@ -100,11 +109,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "release_url": release_url,
                 })
         else:
-            self._redirect("/")
+            self._redirect(f"{UI_BASE_PATH}/")
 
     def do_POST(self) -> None:
         form = self._form()
-        p = self.path.split("?")[0]
+        p = self._strip_base(self.path)
 
         if p == "/login":
             self._handle_login(form)
@@ -141,7 +150,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._html(render_success(form, user=user))
             threading.Thread(target=self._restart, daemon=True).start()
         else:
-            self._redirect("/")
+            self._redirect(f"{UI_BASE_PATH}/")
 
     def _handle_login(self, form: dict[str, str]) -> None:
         username = form.get("username", "")
@@ -183,7 +192,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         token, login_time = create_session(username)
         store_session(token, username, login_time)
         self.send_response(302)
-        self.send_header("Location", "/")
+        self.send_header("Location", f"{UI_BASE_PATH}/")
         self.send_header("Set-Cookie", session_cookie(token))
         self.end_headers()
 

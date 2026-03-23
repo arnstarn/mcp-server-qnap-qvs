@@ -12,5 +12,6 @@ services:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8445
       - CONFIG_UI_PORT=8446
-      - CONFIG_UI_HOST=0.0.0.0
+      - CONFIG_UI_HOST=127.0.0.1
+      - CONFIG_UI_BASE_PATH=/mcp-qvs
       - ENV_FILE=/config/.env
