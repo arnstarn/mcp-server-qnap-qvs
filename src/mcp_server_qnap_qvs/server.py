@@ -1179,11 +1179,40 @@ def main() -> None:
 
     transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
     if transport == "sse":
-        logger.info("Starting QNAP QVS MCP server (SSE on %s:%s)",
-                     os.environ.get("MCP_HOST", "0.0.0.0"),
-                     os.environ.get("MCP_PORT", "8445"))
+        host = os.environ.get("MCP_HOST", "0.0.0.0")
+        port = os.environ.get("MCP_PORT", "8445")
+        ssl_cert = os.environ.get("MCP_SSL_CERT", "")
+        ssl_port = os.environ.get("MCP_SSL_PORT", "8443")
+
+        logger.info("Starting QNAP QVS MCP server (SSE on %s:%s)", host, port)
         if _token_verifier:
             _token_verifier.log_token()
+
+        # Start HTTPS server in background if cert exists
+        if ssl_cert and os.path.exists(ssl_cert):
+            import threading
+
+            def run_https() -> None:
+                import asyncio
+
+                import uvicorn
+
+                async def serve() -> None:
+                    app = mcp.sse_app()
+                    config = uvicorn.Config(
+                        app, host=host, port=int(ssl_port),
+                        ssl_keyfile=ssl_cert, ssl_certfile=ssl_cert,
+                        log_level="info",
+                    )
+                    server = uvicorn.Server(config)
+                    await server.serve()
+
+                asyncio.run(serve())
+
+            t = threading.Thread(target=run_https, daemon=True)
+            t.start()
+            logger.info("HTTPS also available on %s:%s", host, ssl_port)
+
         mcp.run(transport="sse")
     else:
         logger.info("Starting QNAP QVS MCP server (stdio)")

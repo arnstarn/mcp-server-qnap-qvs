@@ -7,6 +7,7 @@ services:
     network_mode: host
     volumes:
       - .:/config
+      - /etc/stunnel/stunnel.pem:/certs/stunnel.pem:ro
     environment:
       - MCP_TRANSPORT=sse
       - MCP_HOST=0.0.0.0
@@ -14,4 +15,6 @@ services:
       - CONFIG_UI_PORT=8446
       - CONFIG_UI_HOST=127.0.0.1
       - CONFIG_UI_BASE_PATH=/mcp-qvs
+      - MCP_SSL_CERT=/certs/stunnel.pem
+      - MCP_SSL_PORT=8443
       - ENV_FILE=/config/.env

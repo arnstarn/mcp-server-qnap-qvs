@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import html
 
-from .constants import FIELDS, MCP_PORT, REGISTRY_FIELDS, UI_BASE_PATH, VERSION
+from .constants import (
+    FIELDS,
+    MCP_HAS_SSL,
+    MCP_PORT,
+    MCP_SSL_PORT,
+    REGISTRY_FIELDS,
+    UI_BASE_PATH,
+    VERSION,
+)
 from .helpers import check_port, read_env, read_log, uptime
 from .styles import CSS
 
@@ -229,11 +237,19 @@ Only needed if image pulls hit rate limits</span></summary>
 <p class="hint" style="margin-bottom:12px">
 Connect any MCP-compatible client. Credentials are hidden by default.</p>
 <div style="margin-bottom:12px">
-<strong style="font-size:12px">SSE Endpoint:</strong>
+<strong style="font-size:12px">HTTP Endpoint:</strong>
 <code id="sseEndpoint" style="font-size:11px"></code>
 <button type="button" class="btn btn-sm"
 onclick="navigator.clipboard.writeText(document.getElementById('sseEndpoint').textContent)">
 Copy</button>
+</div>
+<div style="margin-bottom:12px" id="sslEndpointRow">
+<strong style="font-size:12px">HTTPS Endpoint:</strong>
+<code id="sslEndpoint" style="font-size:11px"></code>
+<button type="button" class="btn btn-sm"
+onclick="navigator.clipboard.writeText(document.getElementById('sslEndpoint').textContent)">
+Copy</button>
+<span class="hint">(uses NAS certificate — may require accepting self-signed cert)</span>
 </div>
 <div style="margin-bottom:16px">
 <strong style="font-size:12px">Auth Token:</strong>
@@ -303,11 +319,16 @@ btn.textContent='Hide All Configs'}}
 else{{
 blocks.style.display='none';tokenEl.textContent='••••••••';
 btn.textContent='Reveal All Configs'}}}}
+var _hasSSL={'true' if MCP_HAS_SSL else 'false'};
 function updateCC(){{
 var t=document.getElementById('field_MCP_AUTH_TOKEN').value||'your-token';
 var h=window.location.hostname;
-var url="http://"+h+":{MCP_PORT}/sse";
-document.getElementById('sseEndpoint').textContent=url;
+var httpUrl="http://"+h+":{MCP_PORT}/sse";
+var httpsUrl="https://"+h+":{MCP_SSL_PORT}/sse";
+var url=_hasSSL?httpsUrl:httpUrl;
+document.getElementById('sseEndpoint').textContent=httpUrl;
+if(_hasSSL){{document.getElementById('sslEndpoint').textContent=httpsUrl}}
+else{{document.getElementById('sslEndpointRow').style.display='none'}}
 document.getElementById('authTokenReal').value=t;
 if(!_configsVisible)document.getElementById('authTokenDisplay').textContent='••••••••';
 var claude=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
@@ -320,8 +341,10 @@ document.getElementById('cfgDesktop').textContent=desktop;
 var vscode=JSON.stringify({{servers:{{"qnap-qvs":{{
 url:url,headers:{{Authorization:"Bearer "+t}}}}}}}},null,2);
 document.getElementById('cfgVscode').textContent=vscode;
+var endpoints=_hasSSL?("HTTPS Endpoint: "+httpsUrl+"\\nHTTP Endpoint: "+httpUrl):
+("HTTP Endpoint: "+httpUrl);
 document.getElementById('cfgOther').textContent=
-"Endpoint: "+url+"\\nTransport: SSE (Server-Sent Events)\\n"+
+endpoints+"\\nTransport: SSE (Server-Sent Events)\\n"+
 "Auth Header: Authorization: Bearer "+t}}
 function testConnection(){{
 var r=document.getElementById('testResult');
