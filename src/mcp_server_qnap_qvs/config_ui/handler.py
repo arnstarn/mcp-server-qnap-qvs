@@ -117,6 +117,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 {}, "Configuration reset.", "info", user=user))
         elif p == "/api/generate-token":
             self._json({"token": secrets.token_urlsafe(48)})
+        elif p == "/api/health":
+            env = read_env()
+            pw = env.get("QNAP_PASSWORD", "")
+            has_real = (env.get("QNAP_HOST") and env.get("QNAP_USERNAME")
+                        and pw and pw != "your-password-here")
+            if has_real:
+                ok, msg = test_qnap(env)
+                self._json({"qnap_ok": ok, "qnap_msg": msg})
+            else:
+                self._json({"qnap_ok": False, "qnap_msg": "Not configured"})
         elif p == "/api/check-update":
             latest, release_url = check_latest_version()
             if latest == "unknown":

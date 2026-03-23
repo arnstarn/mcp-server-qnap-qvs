@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 
 from .constants import FIELDS, MCP_PORT, REGISTRY_FIELDS, UI_BASE_PATH, VERSION
-from .helpers import check_port, read_env, read_log, test_qnap, uptime
+from .helpers import check_port, read_env, read_log, uptime
 from .styles import CSS
 
 B = UI_BASE_PATH  # Short alias for use in templates
@@ -42,21 +42,14 @@ target="_blank">mcp-server-qnap-qvs</a> v{VERSION}
 def render_dashboard(user: str = "") -> str:
     env = read_env()
     mcp_up = check_port()
-    qnap_ok, qnap_msg = (False, "Not configured")
-    pw = env.get("QNAP_PASSWORD", "")
-    has_real_creds = (env.get("QNAP_HOST") and env.get("QNAP_USERNAME")
-                      and pw and pw != "your-password-here")
-    if has_real_creds:
-        qnap_ok, qnap_msg = test_qnap(env)
+    has_token = bool(env.get("MCP_AUTH_TOKEN"))
+    host_val = html.escape(env.get("QNAP_HOST", "—"))
+    user_val = html.escape(env.get("QNAP_USERNAME", "—"))
 
     mcp_dot = "dot-green" if mcp_up else "dot-red"
     mcp_lbl = "Running" if mcp_up else "Stopped"
-    qnap_dot = "dot-green" if qnap_ok else "dot-red"
-    has_token = bool(env.get("MCP_AUTH_TOKEN"))
     tok_dot = "dot-green" if has_token else "dot-yellow"
     tok_lbl = "Configured" if has_token else "Not set"
-    host = html.escape(env.get("QNAP_HOST", "—"))
-    user = html.escape(env.get("QNAP_USERNAME", "—"))
 
     body = f"""
 <h1>Dashboard</h1>
@@ -66,8 +59,8 @@ def render_dashboard(user: str = "") -> str:
     <div><span class="dot {mcp_dot}"></span>{mcp_lbl}</div>
     <div class="lbl">MCP Server (port {MCP_PORT})</div>
 </div>
-<div class="card stat">
-    <div><span class="dot {qnap_dot}"></span>{html.escape(qnap_msg[:40])}</div>
+<div class="card stat" id="qnapStatus">
+    <div><span class="dot dot-yellow"></span>Checking...</div>
     <div class="lbl">QNAP QVS API</div>
 </div>
 <div class="card stat">
@@ -79,11 +72,26 @@ def render_dashboard(user: str = "") -> str:
     <div class="lbl">Uptime</div>
 </div>
 </div>
+<script>
+(function(){{
+fetch('{B}/api/health').then(function(r){{return r.json()}}).then(function(d){{
+var el=document.getElementById('qnapStatus');
+var dot=d.qnap_ok?'dot-green':'dot-red';
+var msg=d.qnap_msg||'Unknown';
+el.innerHTML='<div><span class="dot '+dot+'"></span>'+msg+
+'</div><div class="lbl">QNAP QVS API</div>';
+}}).catch(function(){{
+var el=document.getElementById('qnapStatus');
+el.innerHTML='<div><span class="dot dot-red"></span>Check failed</div>'+
+'<div class="lbl">QNAP QVS API</div>';
+}})
+}})();
+</script>
 <div class="card">
 <h2>Current Configuration</h2>
 <table class="tbl">
-<tr><td>QNAP Host</td><td>{host}</td></tr>
-<tr><td>Username</td><td>{user}</td></tr>
+<tr><td>QNAP Host</td><td>{host_val}</td></tr>
+<tr><td>Username</td><td>{user_val}</td></tr>
 <tr><td>Password</td><td class="masked">{"set" if env.get("QNAP_PASSWORD") else "not set"}</td></tr>
 <tr><td>Auth Token</td><td class="masked">{"set" if has_token else "not set"}</td></tr>
 <tr><td>SSL Verify</td><td>{env.get("QNAP_VERIFY_SSL", "false")}</td></tr>
