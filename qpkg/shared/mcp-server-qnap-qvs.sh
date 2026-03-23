@@ -53,6 +53,16 @@ case "$1" in
         IMAGE=$(get_image)
         $DOCKER pull "$IMAGE" 2>/dev/null || echo "Pull failed — using cached image"
         cd "${QPKG_DIR}" && $COMPOSE -f "${COMPOSE_FILE}" up -d
+
+        # Sync QPKG version in App Center with the running container version
+        NEW_VER=$($DOCKER exec $QPKG_NAME python3 -c "from mcp_server_qnap_qvs import __version__; print(__version__)" 2>/dev/null)
+        if [ -n "$NEW_VER" ]; then
+            CUR_VER=$(getcfg $QPKG_NAME Version -f $CONF)
+            if [ "$NEW_VER" != "$CUR_VER" ]; then
+                /sbin/setcfg $QPKG_NAME Version "$NEW_VER" -f $CONF
+                echo "Updated QPKG version: $CUR_VER -> $NEW_VER"
+            fi
+        fi
         ;;
     stop)
         echo "Stopping ${QPKG_NAME}..."
