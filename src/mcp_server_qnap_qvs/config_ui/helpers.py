@@ -88,6 +88,26 @@ def read_log(lines: int = 200) -> str:
         return "(No log file found. The MCP server may not have started yet.)"
 
 
+def check_latest_version() -> tuple[str, str]:
+    """Check GitHub for the latest release version.
+
+    Returns (latest_version, release_url) or ("unknown", "") on failure.
+    """
+    try:
+        url = ("https://api.github.com/repos/arnstarn/"
+               "mcp-server-qnap-qvs/releases/latest")
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            import json
+            data = json.loads(r.read().decode())
+            tag = data.get("tag_name", "")
+            ver = tag.lstrip("v") if tag else "unknown"
+            html_url = data.get("html_url", "")
+            return ver, html_url
+    except Exception:
+        return "unknown", ""
+
+
 def uptime() -> str:
     secs = int(time.time() - START_TIME)
     if secs < 60:

@@ -18,8 +18,8 @@ from .auth import (
     session_cookie,
     store_session,
 )
-from .constants import ENV_FILE
-from .helpers import read_env, test_qnap, write_env
+from .constants import ENV_FILE, VERSION
+from .helpers import check_latest_version, read_env, test_qnap, write_env
 from .pages import (
     render_dashboard,
     render_login,
@@ -88,6 +88,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 {}, "Configuration reset.", "info", user=user))
         elif p == "/api/generate-token":
             self._json({"token": secrets.token_urlsafe(48)})
+        elif p == "/api/check-update":
+            latest, release_url = check_latest_version()
+            if latest == "unknown":
+                self._json({"error": "Could not check for updates."})
+            else:
+                self._json({
+                    "current": VERSION,
+                    "latest": latest,
+                    "update_available": latest != VERSION,
+                    "release_url": release_url,
+                })
         else:
             self._redirect("/")
 
@@ -106,6 +117,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if p == "/api/test-connection":
             ok, msg = test_qnap(form)
             self._json({"ok": ok, "message": msg})
+        elif p == "/api/update":
+            self._handle_update()
         elif p == "/validate":
             ok, msg = test_qnap(form)
             self._html(render_review(form, ok, msg, user=user))
@@ -195,6 +208,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
+
+    def _handle_update(self) -> None:
+        """Pull latest Docker image and restart the container."""
+        try:
+            # The container can't pull its own image — signal the host
+            # to restart the service (which pulls on start)
+            self._json({
+                "ok": True,
+                "message": "Restarting service to pull the latest image...",
+            })
+            threading.Thread(target=self._restart, daemon=True).start()
+        except Exception as e:
+            self._json({"ok": False, "message": f"Update failed: {e}"})
 
     @staticmethod
     def _restart() -> None:

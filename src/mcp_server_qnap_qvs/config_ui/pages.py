@@ -86,7 +86,41 @@ def render_dashboard(user: str = "") -> str:
 </table>
 <div class="actions">
 <a href="/settings" class="btn btn-primary">Edit Settings</a>
-</div></div>"""
+</div></div>
+<div class="card">
+<h2>Updates</h2>
+<div id="updateStatus">
+<button type="button" class="btn" onclick="checkUpdate()">Check for Updates</button>
+</div>
+</div>
+<script>
+function checkUpdate(){{
+var el=document.getElementById('updateStatus');
+el.innerHTML='<span class="hint">Checking...</span>';
+fetch('/api/check-update').then(function(r){{return r.json()}}).then(function(d){{
+if(d.error){{el.innerHTML='<div class="msg msg-err">'+d.error+'</div>';return}}
+if(d.update_available){{
+el.innerHTML='<div class="msg msg-info">Update available: <strong>v'+d.latest+
+'</strong> (current: v'+d.current+')</div>'+
+'<div class="actions" style="margin-top:8px">'+
+'<a href="'+d.release_url+'" class="btn" target="_blank">Release Notes</a>'+
+'<button class="btn btn-primary" onclick="doUpdate()">Update Now</button></div>'
+}}else{{
+el.innerHTML='<div class="msg msg-ok">You are running the latest version (v'+d.current+')</div>'
+}}
+}}).catch(function(e){{el.innerHTML='<div class="msg msg-err">'+e+'</div>'}})}}
+function doUpdate(){{
+var el=document.getElementById('updateStatus');
+el.innerHTML='<div class="msg msg-info">Pulling latest image and restarting... this may take a minute.</div>';
+fetch('/api/update',{{method:'POST'}}).then(function(r){{return r.json()}}).then(function(d){{
+if(d.ok){{
+el.innerHTML='<div class="msg msg-ok">'+d.message+' The page will reload shortly.</div>';
+setTimeout(function(){{location.reload()}},10000)
+}}else{{
+el.innerHTML='<div class="msg msg-err">'+d.message+'</div>'
+}}
+}}).catch(function(e){{el.innerHTML='<div class="msg msg-err">'+e+'</div>'}})}}
+</script>"""
     return _page("Dashboard", "Dashboard", body, user)
 
 
@@ -190,10 +224,13 @@ Copy</button>
 </div>
 <div style="margin-bottom:16px">
 <strong style="font-size:12px">Auth Token:</strong>
-<code id="authTokenDisplay" style="font-size:11px"></code>
+<code id="authTokenDisplay" style="font-size:11px">••••••••</code>
+<button type="button" class="btn btn-sm" id="tokenToggle"
+onclick="toggleTokenVis()">Show</button>
 <button type="button" class="btn btn-sm"
-onclick="navigator.clipboard.writeText(document.getElementById('authTokenDisplay').textContent)">
+onclick="navigator.clipboard.writeText(document.getElementById('authTokenReal').value)">
 Copy</button>
+<input type="hidden" id="authTokenReal">
 </div>
 <details open style="margin-bottom:12px">
 <summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
@@ -237,12 +274,18 @@ document.getElementById('field_MCP_AUTH_TOKEN').value=t;updateCC()}}
 function copyToken(){{var f=document.getElementById('field_MCP_AUTH_TOKEN');
 navigator.clipboard.writeText(f.value).then(function(){{f.select()}})}}
 function copyEl(id){{navigator.clipboard.writeText(document.getElementById(id).textContent)}}
+function toggleTokenVis(){{
+var el=document.getElementById('authTokenDisplay');
+var btn=document.getElementById('tokenToggle');
+var real=document.getElementById('authTokenReal').value;
+if(el.textContent==='••••••••'){{el.textContent=real;btn.textContent='Hide'}}
+else{{el.textContent='••••••••';btn.textContent='Show'}}}}
 function updateCC(){{
 var t=document.getElementById('field_MCP_AUTH_TOKEN').value||'your-token';
 var h=window.location.hostname;
 var url="http://"+h+":{MCP_PORT}/sse";
 document.getElementById('sseEndpoint').textContent=url;
-document.getElementById('authTokenDisplay').textContent=t;
+document.getElementById('authTokenReal').value=t;
 var claude=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
 url:url,headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
 document.getElementById('cfgClaude').textContent=claude;
