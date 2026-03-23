@@ -41,12 +41,12 @@ Without the guest agent, IP-related tools will return a helpful message explaini
 
 ## Features
 
-**33 tools** across 6 categories:
+**39 tools** across 7 categories:
 
 - **VM lifecycle** — start, shutdown, force-stop, reset, suspend, resume
-- **VM management** — update settings (CPU, memory, name, auto-start), delete, clone, export
+- **VM management** — create, update settings (CPU, memory, name, auto-start), delete, clone, export, import
 - **VM info** — details, state, IPs, adapters, graphics/VNC, CD-ROMs, USBs
-- **Disk & ISO** — list disks, resize, delete, mount/unmount ISOs
+- **Disk & ISO** — list disks, resize, delete, mount/unmount ISOs, scan for ISOs, download ISOs from URL
 - **Snapshots** — list, create, revert, delete
 - **Analysis** — resource overview dashboard (host CPU/RAM utilization, per-VM summary with networking), QVS audit logs, shutdown progress
 - **Safety** — all destructive operations require explicit `confirm=true`
@@ -263,7 +263,7 @@ ${CS_DIR}/bin/docker pull ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
 
 ## Available Tools
 
-### Read-Only (13 tools)
+### Read-Only (14 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -292,16 +292,18 @@ ${CS_DIR}/bin/docker pull ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
 | `suspend_vm` | Suspend to memory | No |
 | `resume_vm` | Resume suspended VM | No |
 
-### VM Management (4 tools)
+### VM Management (6 tools)
 
 | Tool | Description | Confirm? |
 |------|-------------|----------|
+| `create_vm` | Create a new VM with CPU, memory, disk, OS type | Yes |
 | `update_vm` | Change name, CPU, memory, auto-start, description | Yes |
 | `delete_vm` | Permanently destroy a VM and its disks | Yes |
 | `clone_vm` | Clone a VM with a new name | Yes |
 | `export_vm` | Export a VM to a NAS path | Yes |
+| `import_vm_file` | Import a VM from an OVA/OVF file on the NAS | Yes |
 
-### Disks & ISOs (4 tools)
+### Disks & ISOs (6 tools)
 
 | Tool | Description | Confirm? |
 |------|-------------|----------|
@@ -309,6 +311,8 @@ ${CS_DIR}/bin/docker pull ghcr.io/arnstarn/mcp-server-qnap-qvs:latest
 | `delete_disk` | Remove and delete a disk | Yes |
 | `mount_iso` | Mount an ISO to a VM's CD-ROM | Yes |
 | `unmount_iso` | Eject an ISO from a VM's CD-ROM | Yes |
+| `check_iso` | Scan a shared folder for available ISO files | — |
+| `download_iso` | Download an ISO from a URL to the NAS | Yes |
 
 ### Snapshots (4 tools)
 

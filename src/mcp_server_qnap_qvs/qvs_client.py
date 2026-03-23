@@ -265,6 +265,30 @@ class QVSClient:
         """List available ISO images on the NAS."""
         return await self._request("GET", "/qvs/images")
 
+    async def check_iso(self, iso_path: str) -> dict[str, Any]:
+        """Check for available ISOs at a shared folder path."""
+        return await self._request(
+            "POST", "/qvs/vms/check_iso", json={"isoPath": iso_path}
+        )
+
+    # ── VM Import ─────────────────────────────────────────────────
+
+    async def import_check(self, path: str) -> dict[str, Any]:
+        """Check an import source (OVA/OVF/VMDK)."""
+        return await self._request(
+            "POST", "/qvs/vms/import_check", json={"path": path}
+        )
+
+    async def import_config(self, path: str) -> dict[str, Any]:
+        """Get import configuration for a VM file."""
+        return await self._request(
+            "POST", "/qvs/vms/import_config", json={"path": path}
+        )
+
+    async def import_vm(self, **fields: Any) -> dict[str, Any]:
+        """Import a VM from an OVA/OVF file."""
+        return await self._request("POST", "/qvs/vms/import_vm", json=fields)
+
     # ── Logs ──────────────────────────────────────────────────────
 
     async def get_logs(self, limit: int = 50, page: int = 1) -> dict[str, Any]:

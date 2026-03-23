@@ -33,6 +33,9 @@ def test_tools_registered():
         # ISO
         "mount_iso",
         "unmount_iso",
+        "check_iso",
+        "download_iso",
+        "import_vm_file",
         # Guest agent install
         "install_guest_agent_ssh",
         "install_guest_agent_virsh",

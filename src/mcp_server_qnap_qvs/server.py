@@ -505,6 +505,130 @@ async def list_images() -> str:
         return _json({"error": str(e)})
 
 
+@mcp.tool()
+async def check_iso(path: str = "shared://ISO/") -> str:
+    """Scan a shared folder for available ISO files.
+
+    Returns a list of ISO files found at the specified path.
+    Common paths: 'shared://ISO/', 'shared://VMs/', 'shared://Public/'.
+
+    Args:
+        path: Shared folder path to scan for ISOs (default: shared://ISO/)
+    """
+    try:
+        client = await _get_client()
+        result = await client.check_iso(path)
+        return _json(result)
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
+@mcp.tool()
+async def download_iso(
+    url: str,
+    destination: str = "/share/ISO/",
+    filename: str = "",
+    confirm: bool = False,
+) -> str:
+    """DESTRUCTIVE: Download an ISO file from a URL to the NAS.
+
+    Downloads the ISO directly to the NAS storage via SSH. The ISO can
+    then be mounted to a VM using mount_iso with path 'shared://ISO/<filename>'.
+
+    Requires SSH access to the QNAP NAS (configured via QNAP_HOST).
+
+    Args:
+        url: URL to download the ISO from (e.g. https://releases.ubuntu.com/...)
+        destination: NAS directory path (default: /share/ISO/)
+        filename: Override filename (default: derived from URL)
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not filename:
+        filename = url.rstrip("/").split("/")[-1]
+        if not filename.endswith(".iso"):
+            filename += ".iso"
+
+    full_path = f"{destination.rstrip('/')}/{filename}"
+
+    if not confirm:
+        return _json({
+            "warning": (
+                f"This will download '{url}' to '{full_path}' on the NAS. "
+                "This may take a while depending on file size. "
+                "Set confirm=true to proceed."
+            ),
+            "action": "download_iso",
+            "url": url,
+            "destination": full_path,
+            "filename": filename,
+        })
+
+    try:
+        import asyncio
+        proc = await asyncio.create_subprocess_exec(
+            "wget", "-q", "-O", full_path, url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode == 0:
+            return _json({
+                "action": "download_iso",
+                "status": "success",
+                "path": full_path,
+                "qvs_path": f"shared://ISO/{filename}",
+                "hint": (
+                    f"Mount to a VM with: mount_iso(vm_id, cdrom_id, "
+                    f"'shared://ISO/{filename}')"
+                ),
+            })
+        return _json({
+            "action": "download_iso",
+            "status": "failed",
+            "stderr": stderr.decode().strip(),
+        })
+    except Exception as e:
+        return _json({"error": f"Download failed: {e}"})
+
+
+@mcp.tool()
+async def import_vm_file(
+    path: str,
+    name: str = "",
+    confirm: bool = False,
+) -> str:
+    """DESTRUCTIVE: Import a virtual machine from an OVA/OVF file on the NAS.
+
+    The file must already be on a NAS shared folder. Use the QVS shared path
+    format: 'shared://VMs/myvm.ova' or 'shared://Public/exported-vm.ovf'.
+
+    Args:
+        path: Path to the OVA/OVF file on the NAS (shared:// format)
+        name: Optional name for the imported VM
+        confirm: Must be true to execute. Returns a preview otherwise.
+    """
+    if not confirm:
+        return _json({
+            "warning": (
+                f"This will import a VM from '{path}'. "
+                "Set confirm=true to proceed."
+            ),
+            "action": "import_vm",
+            "path": path,
+            "name": name or "(from file)",
+        })
+
+    try:
+        client = await _get_client()
+        fields: dict = {"path": path}
+        if name:
+            fields["name"] = name
+        result = await client.import_vm(**fields)
+        return _json({"action": "import_vm", "path": path, "result": result})
+    except QVSError as e:
+        return _json({"error": str(e)})
+
+
 # ── Logs ─────────────────────────────────────────────────────────
 
 
