@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <plugins>
-  <cachechk>20260323190000</cachechk>
+  <cachechk>20260323200000</cachechk>
   <item>
     <name>MCP QVS Server</name>
     <internalName>mcp-server-qnap-qvs</internalName>
@@ -8,30 +8,30 @@
     <type>Developer Tools</type>
     <icon80>https://raw.githubusercontent.com/arnstarn/mcp-server-qnap-qvs/main/qpkg/icons/mcp-server-qnap-qvs_80.png</icon80>
     <icon100>https://raw.githubusercontent.com/arnstarn/mcp-server-qnap-qvs/main/qpkg/icons/mcp-server-qnap-qvs_80.png</icon100>
-    <description>MCP server for QNAP Virtualization Station — manage VMs via AI assistants. 35 tools for VM lifecycle, snapshots, disks, and monitoring.</description>
+    <description>MCP server for QNAP Virtualization Station — manage VMs via AI assistants. 39 tools for VM lifecycle, snapshots, disks, and monitoring.</description>
     <developer>arnstarn</developer>
     <developerLink>https://github.com/arnstarn/mcp-server-qnap-qvs</developerLink>
     <fwVersion>5.1.0</fwVersion>
-    <version>0.9.1</version>
+    <version>0.9.2</version>
     <platform>
       <platformID>TS-NASX86</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.1/mcp-server-qnap-qvs_0.9.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.2/mcp-server-qnap-qvs_0.9.2.qpkg</location>
     </platform>
     <platform>
       <platformID>TS-X73</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.1/mcp-server-qnap-qvs_0.9.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.2/mcp-server-qnap-qvs_0.9.2.qpkg</location>
     </platform>
     <platform>
       <platformID>TS-X79</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.1/mcp-server-qnap-qvs_0.9.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.2/mcp-server-qnap-qvs_0.9.2.qpkg</location>
     </platform>
     <platform>
       <platformID>TS-X70</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.1/mcp-server-qnap-qvs_0.9.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.2/mcp-server-qnap-qvs_0.9.2.qpkg</location>
     </platform>
     <platform>
       <platformID>OLD_X86</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.1/mcp-server-qnap-qvs_0.9.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.9.2/mcp-server-qnap-qvs_0.9.2.qpkg</location>
     </platform>
   </item>
 </plugins>
