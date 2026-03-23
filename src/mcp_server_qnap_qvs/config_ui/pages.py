@@ -199,10 +199,7 @@ r.innerHTML='<div class="msg '+cls+'">'+d.message+'</div>'}})
 .catch(function(e){{r.innerHTML='<div class="msg msg-err">'+e+'</div>'}})}}
 document.querySelectorAll('input').forEach(function(e){{
 e.addEventListener('input',updateCC)}});
-(function(){{var f=document.getElementById('field_QNAP_HOST');
-if(f&&(!f.value||f.value==='localhost')){{var h=window.location.hostname;
-if(h&&h!=='localhost'&&h!=='127.0.0.1')f.value=h;}}
-}})();updateCC();
+updateCC();
 </script>"""
     return _page("Settings", "Settings", body)
 
@@ -350,7 +347,7 @@ align-self:center"></div>
 </div>"""
 
     if step == 1:
-        hv = html.escape(values.get("QNAP_HOST", ""))
+        hv = html.escape(values.get("QNAP_HOST", "localhost"))
         pv = html.escape(values.get("QNAP_PORT", "443"))
         uv = html.escape(values.get("QNAP_USERNAME", ""))
         pwv = html.escape(values.get("QNAP_PASSWORD", ""))
@@ -364,7 +361,7 @@ to log into the QNAP web UI.</p>
 <form method="POST" action="/wizard/1">
 <div class="field"><label>QNAP Host</label>
 <input type="text" name="QNAP_HOST" value="{hv}" class="input"
-id="field_QNAP_HOST" placeholder="e.g. 192.168.1.100"></div>
+id="field_QNAP_HOST" placeholder="localhost"></div>
 <div class="field"><label>HTTPS Port</label>
 <input type="text" name="QNAP_PORT" value="{pv}" class="input"></div>
 <div class="field"><label>Username</label>
@@ -378,9 +375,7 @@ id="field_QNAP_HOST" placeholder="e.g. 192.168.1.100"></div>
 <div class="actions">
 <button type="submit" class="btn btn-primary">Test &amp; Continue</button>
 </div></form></div>
-<script>(function(){{var f=document.getElementById('field_QNAP_HOST');
-if(f&&!f.value){{var h=window.location.hostname;
-if(h&&h!=='localhost'&&h!=='127.0.0.1')f.value=h;}}}})();</script>"""
+<script>// QNAP_HOST defaults to localhost (server runs on the NAS)</script>"""
     elif step == 2:
         tv = html.escape(values.get("MCP_AUTH_TOKEN", ""))
         hidden = "".join(

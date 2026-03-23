@@ -22,8 +22,8 @@ SESSION_SECRET = secrets.token_hex(32)
 START_TIME = time.time()
 
 FIELDS = [
-    ("QNAP_HOST", "QNAP Hostname / IP", "",
-     "Hostname or IP of your QNAP NAS. Auto-detected from your browser."),
+    ("QNAP_HOST", "QNAP Hostname / IP", "localhost",
+     "Use 'localhost' when running on the QNAP (default). Only change if running externally."),
     ("QNAP_PORT", "HTTPS Port", "443",
      "HTTPS port for the QNAP web UI. Default is 443."),
     ("QNAP_USERNAME", "QNAP Username", "",
