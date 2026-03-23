@@ -256,7 +256,7 @@ onclick="copyEl('cfgClaude')">Copy</button>
 <div class="mono" id="cfgClaude" style="margin-top:4px"></div></div>
 <div style="margin-bottom:12px">
 <strong style="font-size:12px">Claude Desktop</strong>
-<span class="hint">(claude_desktop_config.json)</span>
+<span class="hint">(claude_desktop_config.json — requires Node.js)</span>
 <button type="button" class="btn btn-sm" style="float:right"
 onclick="copyEl('cfgDesktop')">Copy</button>
 <div class="mono" id="cfgDesktop" style="margin-top:4px"></div></div>
@@ -313,7 +313,10 @@ if(!_configsVisible)document.getElementById('authTokenDisplay').textContent='•
 var claude=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
 url:url,headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
 document.getElementById('cfgClaude').textContent=claude;
-document.getElementById('cfgDesktop').textContent=claude;
+var desktop=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
+command:"npx",args:["-y","@anthropic-ai/mcp-proxy",
+"--header","Authorization: Bearer "+t,url]}}}}}},null,2);
+document.getElementById('cfgDesktop').textContent=desktop;
 var vscode=JSON.stringify({{servers:{{"qnap-qvs":{{
 url:url,headers:{{Authorization:"Bearer "+t}}}}}}}},null,2);
 document.getElementById('cfgVscode').textContent=vscode;
