@@ -224,9 +224,9 @@ def render_settings(values: dict[str, str], msg: str = "", mt: str = "info", use
 <form method="POST" action="{B}/validate">
 <div class="card"><h2>QNAP Connection</h2>{rows}</div>
 <details class="card" style="cursor:pointer">
-<summary><h2 style="display:inline;cursor:pointer">Docker Registry (Optional)</h2>
+<summary><h2 style="display:inline;cursor:pointer">Registry Auth (Optional)</h2>
 <span class="hint" style="margin-left:8px">
-Only needed if image pulls hit rate limits</span></summary>
+Only needed if anonymous image pulls hit rate limits</span></summary>
 <div style="margin-top:12px">{reg_rows}</div>
 </details>
 <div class="actions">{reset}{test_btn}

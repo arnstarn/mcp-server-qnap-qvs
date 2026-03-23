@@ -12,26 +12,20 @@ ENV_FILE="${QPKG_DIR}/.env"
 APP_PROXY="/etc/app_proxy.conf"
 PROXY_PATH="/mcp-qvs"
 
+# Official image — not user-configurable (prevents supply chain attacks)
+QPKG_VER=$(getcfg $QPKG_NAME Version -f $CONF 2>/dev/null)
+IMAGE="ghcr.io/arnstarn/mcp-server-qnap-qvs:${QPKG_VER:-latest}"
+
 # Read optional Docker registry credentials from .env
 docker_login() {
     if [ -f "${ENV_FILE}" ]; then
-        REGISTRY=$(grep '^DOCKER_REGISTRY=' "${ENV_FILE}" | cut -d= -f2-)
         USERNAME=$(grep '^DOCKER_USERNAME=' "${ENV_FILE}" | cut -d= -f2-)
         PASSWORD=$(grep '^DOCKER_PASSWORD=' "${ENV_FILE}" | cut -d= -f2-)
         if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
-            echo "Logging into registry ${REGISTRY:-ghcr.io}..."
-            echo "$PASSWORD" | $DOCKER login "${REGISTRY:-ghcr.io}" -u "$USERNAME" --password-stdin 2>/dev/null
+            echo "Logging into registry ghcr.io..."
+            echo "$PASSWORD" | $DOCKER login ghcr.io -u "$USERNAME" --password-stdin 2>/dev/null
         fi
     fi
-}
-
-# Get the configured image name
-get_image() {
-    if [ -f "${ENV_FILE}" ]; then
-        IMG=$(grep '^DOCKER_IMAGE=' "${ENV_FILE}" | cut -d= -f2-)
-    fi
-    REGISTRY=$(grep '^DOCKER_REGISTRY=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2-)
-    echo "${REGISTRY:-ghcr.io}/${IMG:-arnstarn/mcp-server-qnap-qvs:latest}"
 }
 
 # Set up HTTPS reverse proxy via QNAP's apache_proxy
@@ -73,8 +67,9 @@ case "$1" in
         fi
         echo "Starting ${QPKG_NAME}..."
         docker_login
-        IMAGE=$(get_image)
         $DOCKER pull "$IMAGE" 2>/dev/null || echo "Pull failed — using cached image"
+        # Tag as latest so docker-compose can reference it
+        $DOCKER tag "$IMAGE" "ghcr.io/arnstarn/mcp-server-qnap-qvs:latest" 2>/dev/null
         cd "${QPKG_DIR}" && $COMPOSE -f "${COMPOSE_FILE}" up -d
 
         # Set up HTTPS proxy for config UI
