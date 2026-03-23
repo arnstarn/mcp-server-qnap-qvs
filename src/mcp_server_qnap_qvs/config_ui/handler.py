@@ -150,7 +150,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "QNAP_USERNAME": username,
             "QNAP_PASSWORD": password,
             "QNAP_VERIFY_SSL": verify_ssl,
-        })
+        }, require_admin=True)
 
         if not ok:
             # If no config exists yet, try localhost directly
@@ -161,11 +161,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "QNAP_USERNAME": username,
                     "QNAP_PASSWORD": password,
                     "QNAP_VERIFY_SSL": "false",
-                })
+                }, require_admin=True)
 
         if not ok:
-            self._html(render_login(
-                "Login failed — check your QNAP credentials."))
+            self._html(render_login(msg))
             return
 
         token, login_time = create_session(username)

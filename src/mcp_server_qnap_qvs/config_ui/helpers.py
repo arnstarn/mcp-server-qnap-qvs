@@ -48,7 +48,13 @@ def check_port(port: int = MCP_PORT) -> bool:
         return False
 
 
-def test_qnap(values: dict[str, str]) -> tuple[bool, str]:
+def test_qnap(
+    values: dict[str, str], require_admin: bool = False,
+) -> tuple[bool, str]:
+    """Test QNAP QTS authentication.
+
+    If require_admin is True, also checks that the user is an admin.
+    """
     try:
         host = values.get("QNAP_HOST", "")
         port = values.get("QNAP_PORT", "443")
@@ -65,9 +71,11 @@ def test_qnap(values: dict[str, str]) -> tuple[bool, str]:
                f"&plain_pwd={urllib.parse.quote(pw)}")
         with urllib.request.urlopen(url, timeout=10, context=ctx) as r:
             body = r.read().decode()
-            if "<authPassed><![CDATA[1]]>" in body:
-                return True, "Connected successfully."
-            return False, "Login failed — check username and password."
+            if "<authPassed><![CDATA[1]]>" not in body:
+                return False, "Login failed — check username and password."
+            if require_admin and "<isAdmin><![CDATA[1]]>" not in body:
+                return False, "Admin access required. This user is not a QNAP administrator."
+            return True, "Connected successfully."
     except Exception as e:
         return False, f"Connection failed: {e}"
 
