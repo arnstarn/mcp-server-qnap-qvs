@@ -118,6 +118,12 @@ select.input { appearance: auto; }
 """
 
 JS_MAIN = """
+function toggleVis(fieldId, btnId) {
+    const f = document.getElementById('field_' + fieldId);
+    const b = document.getElementById(btnId);
+    if (f.type === 'password') { f.type = 'text'; b.textContent = 'Hide'; }
+    else { f.type = 'password'; b.textContent = 'Show'; }
+}
 function generateToken() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     let token = '';
@@ -148,17 +154,15 @@ function updateClientConfig() {
 }
 document.querySelectorAll('input').forEach(el => el.addEventListener('input', updateClientConfig));
 
-// Auto-detect QNAP host from browser URL if field is empty
+// Auto-detect QNAP host from browser URL — only if no saved value exists
 (function() {
     const hostField = document.getElementById('field_QNAP_HOST');
-    if (hostField && !hostField.value) {
+    if (hostField && (!hostField.value || hostField.value === 'localhost')) {
         const browserHost = window.location.hostname;
-        // If accessing the config UI via an IP or hostname (not localhost),
-        // that's the QNAP's address — prefill it
         if (browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1') {
+            // User is accessing via the NAS IP/hostname — that IS the QNAP
             hostField.value = browserHost;
-        } else {
-            hostField.value = 'localhost';
+            hostField.dataset.autoDetected = 'true';
         }
     }
 })();
@@ -222,10 +226,11 @@ def validate_connection(values: dict[str, str]) -> tuple[bool, str]:
 
 
 def render_form(values: dict[str, str], message: str = "", msg_type: str = "info") -> str:
+    has_config = bool(values.get("QNAP_USERNAME") and values.get("QNAP_PASSWORD"))
+
     rows = ""
     for key, label, default, hint_text in FIELDS:
         val = html.escape(values.get(key, default))
-        input_type = "password" if "PASSWORD" in key else "text"
         extra = ""
 
         if key == "MCP_AUTH_TOKEN":
@@ -236,7 +241,15 @@ def render_form(values: dict[str, str], message: str = "", msg_type: str = "info
                 "Copy</button>"
             )
 
-        if key == "QNAP_VERIFY_SSL":
+        if "PASSWORD" in key or key == "MCP_AUTH_TOKEN":
+            show_id = f"show_{key}"
+            inp = (
+                f'<input type="password" name="{key}" '
+                f'value="{val}" class="input" id="field_{key}">'
+                f'<button type="button" class="btn btn-sm" id="{show_id}" '
+                f'onclick="toggleVis(\'{key}\', \'{show_id}\')">Show</button>'
+            )
+        elif key == "QNAP_VERIFY_SSL":
             sel_f = "selected" if val != "true" else ""
             sel_t = "selected" if val == "true" else ""
             inp = (
@@ -247,7 +260,7 @@ def render_form(values: dict[str, str], message: str = "", msg_type: str = "info
             )
         else:
             inp = (
-                f'<input type="{input_type}" name="{key}" '
+                f'<input type="text" name="{key}" '
                 f'value="{val}" class="input" id="field_{key}">'
             )
 
@@ -260,17 +273,19 @@ def render_form(values: dict[str, str], message: str = "", msg_type: str = "info
 
     msg_html = ""
     if message:
-        msg_html = f'<div class="message message-{msg_type}">{html.escape(message)}</div>'
+        msg_html = (
+            f'<div class="message message-{msg_type}">'
+            f'{html.escape(message)}</div>'
+        )
 
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MCP QVS Server — Setup</title>
-<style>{CSS}</style></head>
-<body><div class="container">
-<h1>MCP QVS Server</h1>
-<p class="subtitle">Manage QNAP Virtualization Station VMs with AI</p>
-{msg_html}
+    if has_config and not message:
+        msg_html = (
+            '<div class="message message-success">'
+            "Configuration loaded. Update any fields below and click Save, "
+            "or click Reset to start fresh.</div>"
+        )
+
+    setup_steps = """
 <div class="setup-info">
 <h2>How It Works</h2>
 <div class="step"><div class="step-num">1</div>
@@ -285,7 +300,22 @@ validated against the QNAP before saving.</div></div>
 <div class="step"><div class="step-num">4</div>
 <div class="step-text">Configure your MCP client with the connection details
 shown below the form.</div></div>
-</div>
+</div>"""
+
+    reset_btn = ""
+    if has_config:
+        reset_btn = '<a href="/reset" class="btn btn-danger">Reset</a>'
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP QVS Server — Setup</title>
+<style>{CSS}</style></head>
+<body><div class="container">
+<h1>MCP QVS Server</h1>
+<p class="subtitle">Manage QNAP Virtualization Station VMs with AI</p>
+{msg_html}
+{setup_steps}
 <form method="POST" action="/validate">
 <div class="card">
 <h2 style="color: #58a6ff; font-size: 16px; margin-bottom: 16px;">
@@ -293,6 +323,7 @@ QNAP Connection</h2>
 {rows}
 </div>
 <div class="actions">
+{reset_btn}
 <button type="submit" class="btn btn-primary">Save</button>
 </div>
 </form>
@@ -423,6 +454,16 @@ class ConfigHandler(http.server.BaseHTTPRequestHandler):
             return
         if self.path == "/api/generate-token":
             self._json_response({"token": secrets.token_urlsafe(48)})
+            return
+        if self.path == "/reset":
+            try:
+                os.remove(ENV_FILE)
+            except FileNotFoundError:
+                pass
+            defaults: dict[str, str] = {}
+            self._html_response(render_form(
+                defaults, "Configuration reset. Enter new values below.", "info"
+            ))
             return
         values = read_env()
         self._html_response(render_form(values))
