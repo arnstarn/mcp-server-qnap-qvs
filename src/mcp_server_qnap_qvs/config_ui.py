@@ -7,7 +7,9 @@ with generate/copy buttons and setup instructions.
 
 from __future__ import annotations
 
+import hashlib
 import html
+import http.cookies
 import http.server
 import json
 import os
@@ -19,6 +21,9 @@ import urllib.parse
 
 ENV_FILE = os.environ.get("ENV_FILE", "/config/.env")
 UI_PORT = int(os.environ.get("CONFIG_UI_PORT", "8446"))
+UI_HOST = os.environ.get("CONFIG_UI_HOST", "127.0.0.1")
+UI_PASSWORD_FILE = os.environ.get("CONFIG_UI_PASSWORD_FILE", "/config/.ui_password")
+SESSION_SECRET = secrets.token_hex(32)  # Per-process session key
 
 
 def _detect_default_host() -> str:
@@ -169,6 +174,109 @@ document.querySelectorAll('input').forEach(el => el.addEventListener('input', up
 
 updateClientConfig();
 """
+
+
+def _hash_password(password: str) -> str:
+    """Hash a password with a salt for storage."""
+    salt = secrets.token_hex(16)
+    h = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
+    return f"{salt}:{h}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    """Verify a password against a stored hash."""
+    if ":" not in stored:
+        return False
+    salt, expected = stored.split(":", 1)
+    h = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
+    return h == expected
+
+
+def _has_ui_password() -> bool:
+    return os.path.exists(UI_PASSWORD_FILE)
+
+
+def _save_ui_password(password: str) -> None:
+    with open(UI_PASSWORD_FILE, "w") as f:
+        f.write(_hash_password(password))
+
+
+def _check_ui_password(password: str) -> bool:
+    try:
+        with open(UI_PASSWORD_FILE) as f:
+            return _verify_password(password, f.read().strip())
+    except FileNotFoundError:
+        return False
+
+
+def _make_session_token(password_hash: str) -> str:
+    """Create a session token tied to the current process + password."""
+    raw = f"{SESSION_SECRET}:{password_hash}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _valid_session(cookie_header: str) -> bool:
+    """Check if the request has a valid session cookie."""
+    if not _has_ui_password():
+        return True  # No password set = no auth required yet
+    try:
+        c = http.cookies.SimpleCookie(cookie_header)
+        token = c.get("mcp_qvs_session")
+        if not token:
+            return False
+        with open(UI_PASSWORD_FILE) as f:
+            stored = f.read().strip()
+        return token.value == _make_session_token(stored)
+    except Exception:
+        return False
+
+
+def render_login(message: str = "", is_setup: bool = False) -> str:
+    """Render the login or initial password setup page."""
+    title = "Set Config UI Password" if is_setup else "Config UI Login"
+    btn = "Set Password" if is_setup else "Login"
+    info = (
+        "Choose a password to protect this configuration page. "
+        "You'll need it to access or change settings."
+        if is_setup else
+        "Enter the config UI password to access settings."
+    )
+    extra_field = ""
+    if is_setup:
+        extra_field = """
+        <div class="field">
+            <label>Confirm Password</label>
+            <input type="password" name="confirm" class="input"
+                   required placeholder="Confirm password">
+        </div>"""
+
+    msg_html = ""
+    if message:
+        msg_html = f'<div class="message message-error">{html.escape(message)}</div>'
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP QVS Server — {title}</title>
+<style>{CSS}</style></head>
+<body><div class="container">
+<h1>MCP QVS Server</h1>
+<p class="subtitle">{title}</p>
+{msg_html}
+<div class="card">
+<p style="color: #8b949e; font-size: 13px; margin-bottom: 16px;">{info}</p>
+<form method="POST" action="/login">
+<div class="field">
+    <label>Password</label>
+    <input type="password" name="password" class="input"
+           required autofocus placeholder="Enter password">
+</div>
+{extra_field}
+<div class="actions">
+    <button type="submit" class="btn btn-primary">{btn}</button>
+</div>
+</form></div>
+</div></body></html>"""
 
 
 def read_env() -> dict[str, str]:
@@ -447,7 +555,30 @@ document.getElementById('clientConfig').textContent = config;
 
 
 class ConfigHandler(http.server.BaseHTTPRequestHandler):
+    def _require_auth(self) -> bool:
+        """Check auth. Returns True if request should proceed."""
+        cookie = self.headers.get("Cookie", "")
+        if _valid_session(cookie):
+            return True
+        # Not authenticated — show login or setup
+        if not _has_ui_password():
+            self._html_response(render_login(is_setup=True))
+        else:
+            self._html_response(render_login())
+        return False
+
     def do_GET(self) -> None:
+        # Login page doesn't require auth
+        if self.path == "/login":
+            if not _has_ui_password():
+                self._html_response(render_login(is_setup=True))
+            else:
+                self._html_response(render_login())
+            return
+
+        if not self._require_auth():
+            return
+
         if self.path == "/api/config":
             values = read_env()
             self._json_response(values)
@@ -465,11 +596,64 @@ class ConfigHandler(http.server.BaseHTTPRequestHandler):
                 defaults, "Configuration reset. Enter new values below.", "info"
             ))
             return
+        if self.path == "/logout":
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.send_header(
+                "Set-Cookie", "mcp_qvs_session=; Max-Age=0; Path=/; HttpOnly"
+            )
+            self.end_headers()
+            return
         values = read_env()
         self._html_response(render_form(values))
 
     def do_POST(self) -> None:
         values = self._parse_form()
+
+        if self.path == "/login":
+            password = values.get("password", "")
+            if not _has_ui_password():
+                # First time setup
+                confirm = values.get("confirm", "")
+                if not password or len(password) < 6:
+                    self._html_response(render_login(
+                        "Password must be at least 6 characters.", is_setup=True
+                    ))
+                    return
+                if password != confirm:
+                    self._html_response(render_login(
+                        "Passwords do not match.", is_setup=True
+                    ))
+                    return
+                _save_ui_password(password)
+                with open(UI_PASSWORD_FILE) as f:
+                    stored = f.read().strip()
+                token = _make_session_token(stored)
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.send_header(
+                    "Set-Cookie",
+                    f"mcp_qvs_session={token}; Path=/; HttpOnly; SameSite=Strict",
+                )
+                self.end_headers()
+            else:
+                if _check_ui_password(password):
+                    with open(UI_PASSWORD_FILE) as f:
+                        stored = f.read().strip()
+                    token = _make_session_token(stored)
+                    self.send_response(302)
+                    self.send_header("Location", "/")
+                    self.send_header(
+                        "Set-Cookie",
+                        f"mcp_qvs_session={token}; Path=/; HttpOnly; SameSite=Strict",
+                    )
+                    self.end_headers()
+                else:
+                    self._html_response(render_login("Incorrect password."))
+            return
+
+        if not self._require_auth():
+            return
 
         if self.path == "/validate":
             valid, msg = validate_connection(values)
@@ -478,7 +662,6 @@ class ConfigHandler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/confirm":
             write_env(values)
             self._html_response(render_success(values))
-            # Schedule a delayed restart so the response page renders
             threading.Thread(
                 target=self._delayed_restart, daemon=True
             ).start()
@@ -517,8 +700,13 @@ class ConfigHandler(http.server.BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    with socketserver.TCPServer(("0.0.0.0", UI_PORT), ConfigHandler) as httpd:
-        print(f"Config UI running on http://0.0.0.0:{UI_PORT}")
+    with socketserver.TCPServer((UI_HOST, UI_PORT), ConfigHandler) as httpd:
+        print(f"Config UI running on http://{UI_HOST}:{UI_PORT}")
+        if UI_HOST == "127.0.0.1":
+            print("  Bound to localhost only. Use QNAP App Center or SSH tunnel to access.")
+            print("  Set CONFIG_UI_HOST=0.0.0.0 to allow network access (less secure).")
+        if not _has_ui_password():
+            print("  First visit will prompt you to set a config UI password.")
         httpd.serve_forever()
 
 
