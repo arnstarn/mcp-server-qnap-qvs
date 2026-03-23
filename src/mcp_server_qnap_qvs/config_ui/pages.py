@@ -213,8 +213,8 @@ Only needed if image pulls hit rate limits</span></summary>
 </div></form>
 <div class="card" style="margin-top:16px">
 <h2>MCP Client Configuration</h2>
-<p class="hint" style="margin-bottom:8px">
-Connect any MCP-compatible client using the settings below.</p>
+<p class="hint" style="margin-bottom:12px">
+Connect any MCP-compatible client. Credentials are hidden by default.</p>
 <div style="margin-bottom:12px">
 <strong style="font-size:12px">SSE Endpoint:</strong>
 <code id="sseEndpoint" style="font-size:11px"></code>
@@ -225,35 +225,38 @@ Copy</button>
 <div style="margin-bottom:16px">
 <strong style="font-size:12px">Auth Token:</strong>
 <code id="authTokenDisplay" style="font-size:11px">••••••••</code>
-<button type="button" class="btn btn-sm" id="tokenToggle"
-onclick="toggleTokenVis()">Show</button>
 <button type="button" class="btn btn-sm"
 onclick="navigator.clipboard.writeText(document.getElementById('authTokenReal').value)">
 Copy</button>
 <input type="hidden" id="authTokenReal">
 </div>
-<details open style="margin-bottom:12px">
-<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
-Claude Code <span class="hint">(~/.claude.json)</span></summary>
-<div class="copy-block">
-<button type="button" class="btn btn-sm" onclick="copyEl('cfgClaude')">Copy</button>
-<div class="mono" id="cfgClaude"></div></div></details>
-<details style="margin-bottom:12px">
-<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
-Claude Desktop <span class="hint">(claude_desktop_config.json)</span></summary>
-<div class="copy-block">
-<button type="button" class="btn btn-sm" onclick="copyEl('cfgDesktop')">Copy</button>
-<div class="mono" id="cfgDesktop"></div></div></details>
-<details style="margin-bottom:12px">
-<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
-VS Code / Cursor <span class="hint">(.vscode/mcp.json)</span></summary>
-<div class="copy-block">
-<button type="button" class="btn btn-sm" onclick="copyEl('cfgVscode')">Copy</button>
-<div class="mono" id="cfgVscode"></div></div></details>
-<details style="margin-bottom:12px">
-<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
-Other MCP Clients</summary>
-<div class="mono" id="cfgOther"></div></details>
+<div style="margin-bottom:12px">
+<button type="button" class="btn" id="revealBtn" onclick="toggleAllConfigs()">
+Reveal All Configs</button>
+</div>
+<div id="configBlocks" style="display:none">
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">Claude Code</strong>
+<span class="hint">(~/.claude.json)</span>
+<button type="button" class="btn btn-sm" style="float:right"
+onclick="copyEl('cfgClaude')">Copy</button>
+<div class="mono" id="cfgClaude" style="margin-top:4px"></div></div>
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">Claude Desktop</strong>
+<span class="hint">(claude_desktop_config.json)</span>
+<button type="button" class="btn btn-sm" style="float:right"
+onclick="copyEl('cfgDesktop')">Copy</button>
+<div class="mono" id="cfgDesktop" style="margin-top:4px"></div></div>
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">VS Code / Cursor</strong>
+<span class="hint">(.vscode/mcp.json)</span>
+<button type="button" class="btn btn-sm" style="float:right"
+onclick="copyEl('cfgVscode')">Copy</button>
+<div class="mono" id="cfgVscode" style="margin-top:4px"></div></div>
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">Other MCP Clients</strong>
+<div class="mono" id="cfgOther" style="margin-top:4px"></div></div>
+</div>
 </div>
 <div class="card"><h2>Help</h2>
 <p style="display:flex;gap:16px;flex-wrap:wrap">
@@ -274,18 +277,26 @@ document.getElementById('field_MCP_AUTH_TOKEN').value=t;updateCC()}}
 function copyToken(){{var f=document.getElementById('field_MCP_AUTH_TOKEN');
 navigator.clipboard.writeText(f.value).then(function(){{f.select()}})}}
 function copyEl(id){{navigator.clipboard.writeText(document.getElementById(id).textContent)}}
-function toggleTokenVis(){{
-var el=document.getElementById('authTokenDisplay');
-var btn=document.getElementById('tokenToggle');
+var _configsVisible=false;
+function toggleAllConfigs(){{
+var blocks=document.getElementById('configBlocks');
+var btn=document.getElementById('revealBtn');
+var tokenEl=document.getElementById('authTokenDisplay');
 var real=document.getElementById('authTokenReal').value;
-if(el.textContent==='••••••••'){{el.textContent=real;btn.textContent='Hide'}}
-else{{el.textContent='••••••••';btn.textContent='Show'}}}}
+_configsVisible=!_configsVisible;
+if(_configsVisible){{
+blocks.style.display='block';tokenEl.textContent=real;
+btn.textContent='Hide All Configs'}}
+else{{
+blocks.style.display='none';tokenEl.textContent='••••••••';
+btn.textContent='Reveal All Configs'}}}}
 function updateCC(){{
 var t=document.getElementById('field_MCP_AUTH_TOKEN').value||'your-token';
 var h=window.location.hostname;
 var url="http://"+h+":{MCP_PORT}/sse";
 document.getElementById('sseEndpoint').textContent=url;
 document.getElementById('authTokenReal').value=t;
+if(!_configsVisible)document.getElementById('authTokenDisplay').textContent='••••••••';
 var claude=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
 url:url,headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
 document.getElementById('cfgClaude').textContent=claude;
