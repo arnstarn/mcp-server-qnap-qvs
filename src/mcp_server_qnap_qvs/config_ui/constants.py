@@ -16,9 +16,9 @@ ENV_FILE = os.environ.get("ENV_FILE", "/config/.env")
 LOG_FILE = os.environ.get("LOG_FILE", "/config/mcp-qvs.log")
 UI_PORT = int(os.environ.get("CONFIG_UI_PORT", "8446"))
 UI_HOST = os.environ.get("CONFIG_UI_HOST", "127.0.0.1")
-UI_PASSWORD_FILE = os.environ.get("CONFIG_UI_PASSWORD_FILE", "/config/.ui_password")
 MCP_PORT = int(os.environ.get("MCP_PORT", "8445"))
 SESSION_SECRET = secrets.token_hex(32)
+SESSION_TIMEOUT = int(os.environ.get("SESSION_TIMEOUT", "1800"))  # 30 min default
 START_TIME = time.time()
 
 FIELDS = [

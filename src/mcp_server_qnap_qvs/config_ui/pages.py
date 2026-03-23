@@ -9,27 +9,27 @@ from .helpers import check_port, read_env, read_log, test_qnap, uptime
 from .styles import CSS
 
 
-def _nav(active: str) -> str:
+def _nav(active: str, user: str = "") -> str:
     items = [
-        ("Dashboard", "/"), ("Settings", "/settings"),
-        ("Logs", "/logs"), ("Change Password", "/change-password"),
+        ("Dashboard", "/"), ("Settings", "/settings"), ("Logs", "/logs"),
     ]
     links = ""
     for label, href in items:
         cls = ' class="active"' if active == label else ""
         links += f'<a href="{href}"{cls}>{label}</a>'
+    user_html = f'<span class="ver">{html.escape(user)}</span>' if user else ""
     return f"""<div class="nav">{links}<div class="spacer"></div>
-<span class="ver">v{VERSION}</span>
+{user_html}<span class="ver">v{VERSION}</span>
 <a href="/logout">Logout</a></div>"""
 
 
-def _page(title: str, nav_active: str, body: str) -> str:
+def _page(title: str, nav_active: str, body: str, user: str = "") -> str:
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MCP QVS — {title}</title>
 <style>{CSS}</style></head>
-<body>{_nav(nav_active)}
+<body>{_nav(nav_active, user)}
 <div class="container">{body}</div>
 <div class="footer">
 <a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
@@ -37,7 +37,7 @@ target="_blank">mcp-server-qnap-qvs</a> v{VERSION}
 </div></body></html>"""
 
 
-def render_dashboard() -> str:
+def render_dashboard(user: str = "") -> str:
     env = read_env()
     mcp_up = check_port()
     qnap_ok, qnap_msg = (False, "Not configured")
@@ -87,10 +87,10 @@ def render_dashboard() -> str:
 <div class="actions">
 <a href="/settings" class="btn btn-primary">Edit Settings</a>
 </div></div>"""
-    return _page("Dashboard", "Dashboard", body)
+    return _page("Dashboard", "Dashboard", body, user)
 
 
-def render_settings(values: dict[str, str], msg: str = "", mt: str = "info") -> str:
+def render_settings(values: dict[str, str], msg: str = "", mt: str = "info", user: str = "") -> str:
     has_cfg = bool(values.get("QNAP_USERNAME") and values.get("QNAP_PASSWORD"))
     rows = ""
     for key, label, default, hint_text in FIELDS:
@@ -159,12 +159,10 @@ Add this to <code>~/.claude.json</code> or your MCP client config:</p>
 <div class="mono" id="clientConfig"></div></div></div>
 <div class="card"><h2>Account &amp; Help</h2>
 <p style="display:flex;gap:16px;flex-wrap:wrap">
-<a href="/change-password" style="color:#58a6ff">Change Password</a>
 <a href="/logout" style="color:#58a6ff">Logout</a>
 <a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
 style="color:#58a6ff" target="_blank">GitHub</a></p>
-<p class="hint" style="margin-top:8px;color:#6e7681;font-size:10px">
-Forgot your password? SSH into the NAS and delete the password file.</p></div>
+</div>
 <script>
 function toggleVis(fid,bid){{
 var f=document.getElementById('field_'+fid),b=document.getElementById(bid);
@@ -201,10 +199,10 @@ document.querySelectorAll('input').forEach(function(e){{
 e.addEventListener('input',updateCC)}});
 updateCC();
 </script>"""
-    return _page("Settings", "Settings", body)
+    return _page("Settings", "Settings", body, user)
 
 
-def render_review(values: dict[str, str], ok: bool, msg: str) -> str:
+def render_review(values: dict[str, str], ok: bool, msg: str, user: str = "") -> str:
     rows = ""
     for key, label, default, _ in FIELDS:
         val = values.get(key, default)
@@ -235,10 +233,10 @@ def render_review(values: dict[str, str], ok: bool, msg: str) -> str:
 <div class="msg {mc}">{html.escape(msg)}</div>
 <div class="card"><h2>Summary</h2>
 <table class="tbl">{rows}</table></div>{buttons}"""
-    return _page("Review", "Settings", body)
+    return _page("Review", "Settings", body, user)
 
 
-def render_success(values: dict[str, str]) -> str:
+def render_success(values: dict[str, str], user: str = "") -> str:
     token = html.escape(values.get("MCP_AUTH_TOKEN", ""))
     body = f"""
 <h1>Setup Complete</h1>
@@ -261,10 +259,10 @@ document.getElementById('clientConfig').textContent=JSON.stringify({{
 mcpServers:{{"qnap-qvs":{{url:"http://"+h+":{MCP_PORT}/sse",
 headers:{{Authorization:"Bearer {token}"}},transportType:"sse"}}}}}},null,2);
 </script>"""
-    return _page("Complete", "Settings", body)
+    return _page("Complete", "Settings", body, user)
 
 
-def render_logs() -> str:
+def render_logs(user: str = "") -> str:
     log = html.escape(read_log(200))
     body = f"""
 <h1>Server Logs</h1>
@@ -272,19 +270,12 @@ def render_logs() -> str:
 <div class="actions" style="margin-bottom:12px">
 <button class="btn btn-sm" onclick="location.reload()">Refresh</button></div>
 <pre class="log">{log}</pre>"""
-    return _page("Logs", "Logs", body)
+    return _page("Logs", "Logs", body, user)
 
 
-def render_login(msg: str = "", setup: bool = False) -> str:
-    title = "Set Config UI Password" if setup else "Login"
-    btn = "Set Password" if setup else "Login"
-    info = ("Choose a password to protect this page (min 6 characters)."
-            if setup else "Enter your config UI password.")
-    extra = ""
-    if setup:
-        extra = """<div class="field"><label>Confirm Password</label>
-<input type="password" name="confirm" class="input" required
-placeholder="Confirm password"></div>"""
+def render_login(msg: str = "") -> str:
+    title = "Login"
+    info = "Sign in with your QNAP admin credentials."
     msg_html = (f'<div class="msg msg-err">{html.escape(msg)}</div>'
                 if msg else "")
     return f"""<!DOCTYPE html>
@@ -297,11 +288,12 @@ placeholder="Confirm password"></div>"""
 {msg_html}
 <div class="card"><p class="hint" style="margin-bottom:12px">{info}</p>
 <form method="POST" action="/login">
+<div class="field"><label>Username</label>
+<input type="text" name="username" class="input" required autofocus></div>
 <div class="field"><label>Password</label>
-<input type="password" name="password" class="input" required autofocus></div>
-{extra}
+<input type="password" name="password" class="input" required></div>
 <div class="actions">
-<button type="submit" class="btn btn-primary">{btn}</button></div>
+<button type="submit" class="btn btn-primary">Login</button></div>
 </form></div>
 <div class="footer">
 <a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
@@ -309,31 +301,8 @@ target="_blank">mcp-server-qnap-qvs</a> v{VERSION}</div>
 </div></body></html>"""
 
 
-def render_change_pw(msg: str = "", mt: str = "info") -> str:
-    msg_html = (f'<div class="msg msg-{mt}">{html.escape(msg)}</div>'
-                if msg else "")
-    body = f"""
-<h1>Change Password</h1>
-{msg_html}
-<div class="card">
-<form method="POST" action="/change-password">
-<div class="field"><label>Current Password</label>
-<input type="password" name="current" class="input" required></div>
-<div class="field"><label>New Password</label>
-<input type="password" name="password" class="input" required
-placeholder="Min 6 characters"></div>
-<div class="field"><label>Confirm New Password</label>
-<input type="password" name="confirm" class="input" required></div>
-<div class="actions"><a href="/" class="btn">Cancel</a>
-<button type="submit" class="btn btn-primary">Change Password</button>
-</div></form></div>
-<p class="hint" style="margin-top:12px">
-Forgot your password? SSH into the NAS and delete the password file.</p>"""
-    return _page("Change Password", "Change Password", body)
-
-
 def render_wizard(step: int = 1, values: dict | None = None,
-                  msg: str = "", mt: str = "info") -> str:
+                  msg: str = "", mt: str = "info", user: str = "") -> str:
     values = values or {}
     msg_html = (f'<div class="msg msg-{mt}">{html.escape(msg)}</div>'
                 if msg else "")
@@ -415,4 +384,4 @@ navigator.clipboard.writeText(f.value).then(function(){{f.select()}})}}
 <h1>Setup Wizard</h1>
 <p class="subtitle">First-time configuration</p>
 {steps_bar}{content}"""
-    return _page("Setup", "", body)
+    return _page("Setup", "", body, user)

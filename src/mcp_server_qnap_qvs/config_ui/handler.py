@@ -11,16 +11,16 @@ import time
 import urllib.parse
 
 from .auth import (
-    check_password,
-    has_password,
-    make_session_token,
-    save_password,
-    valid_session,
+    clear_cookie,
+    clear_session,
+    create_session,
+    get_session,
+    session_cookie,
+    store_session,
 )
-from .constants import ENV_FILE, UI_PASSWORD_FILE
+from .constants import ENV_FILE
 from .helpers import read_env, test_qnap, write_env
 from .pages import (
-    render_change_pw,
     render_dashboard,
     render_login,
     render_logs,
@@ -32,52 +32,64 @@ from .pages import (
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def _auth_ok(self) -> bool:
-        if valid_session(self.headers.get("Cookie", "")):
-            return True
-        self._html(render_login(setup=not has_password()))
-        return False
+    def _get_user(self) -> str | None:
+        """Return logged-in username or None."""
+        return get_session(self.headers.get("Cookie", ""))
+
+    def _require_auth(self) -> str | None:
+        """Check auth. Returns username if ok, None if redirected to login."""
+        user = self._get_user()
+        if user:
+            return user
+        self._html(render_login())
+        return None
 
     def do_GET(self) -> None:
         p = self.path.split("?")[0]
 
         if p == "/login":
-            self._html(render_login(setup=not has_password()))
+            # If already logged in, redirect to dashboard
+            if self._get_user():
+                self._redirect("/")
+                return
+            self._html(render_login())
             return
 
-        if not self._auth_ok():
+        if p == "/logout":
+            clear_session(self.headers.get("Cookie", ""))
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.send_header("Set-Cookie", clear_cookie())
+            self.end_headers()
+            return
+
+        user = self._require_auth()
+        if not user:
             return
 
         env = read_env()
         is_first_run = not env.get("QNAP_USERNAME")
 
         if p in ("/", ""):
-            self._html(render_wizard(1) if is_first_run else render_dashboard())
+            if is_first_run:
+                self._html(render_wizard(1, user=user))
+            else:
+                self._html(render_dashboard(user=user))
         elif p == "/settings":
-            self._html(render_settings(env))
+            self._html(render_settings(env, user=user))
         elif p == "/logs":
-            self._html(render_logs())
-        elif p == "/change-password":
-            self._html(render_change_pw())
+            self._html(render_logs(user=user))
         elif p == "/reset":
             try:
                 os.remove(ENV_FILE)
             except FileNotFoundError:
                 pass
-            self._html(render_settings({}, "Configuration reset.", "info"))
-        elif p == "/logout":
-            self.send_response(302)
-            self.send_header("Location", "/login")
-            self.send_header(
-                "Set-Cookie", "mcp_qvs_session=; Max-Age=0; Path=/; HttpOnly"
-            )
-            self.end_headers()
+            self._html(render_settings(
+                {}, "Configuration reset.", "info", user=user))
         elif p == "/api/generate-token":
             self._json({"token": secrets.token_urlsafe(48)})
         else:
-            self.send_response(302)
-            self.send_header("Location", "/")
-            self.end_headers()
+            self._redirect("/")
 
     def do_POST(self) -> None:
         form = self._form()
@@ -87,13 +99,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._handle_login(form)
             return
 
-        if p == "/change-password":
-            if not self._auth_ok():
-                return
-            self._handle_change_pw(form)
-            return
-
-        if not self._auth_ok():
+        user = self._require_auth()
+        if not user:
             return
 
         if p == "/api/test-connection":
@@ -101,72 +108,76 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json({"ok": ok, "message": msg})
         elif p == "/validate":
             ok, msg = test_qnap(form)
-            self._html(render_review(form, ok, msg))
+            self._html(render_review(form, ok, msg, user=user))
         elif p == "/confirm":
             write_env(form)
-            self._html(render_success(form))
+            self._html(render_success(form, user=user))
             threading.Thread(target=self._restart, daemon=True).start()
         elif p == "/wizard/1":
             ok, msg = test_qnap(form)
             if ok:
-                self._html(render_wizard(2, form))
+                self._html(render_wizard(2, form, user=user))
             else:
-                self._html(render_wizard(1, form, msg, "err"))
+                self._html(render_wizard(1, form, msg, "err", user=user))
         elif p == "/wizard/2":
             if not form.get("MCP_AUTH_TOKEN"):
-                self._html(render_wizard(2, form, "Please set a token.", "err"))
+                self._html(render_wizard(
+                    2, form, "Please set a token.", "err", user=user))
                 return
             write_env(form)
-            self._html(render_success(form))
+            self._html(render_success(form, user=user))
             threading.Thread(target=self._restart, daemon=True).start()
         else:
-            self.send_response(302)
-            self.send_header("Location", "/")
-            self.end_headers()
+            self._redirect("/")
 
     def _handle_login(self, form: dict[str, str]) -> None:
-        pw = form.get("password", "")
-        if not has_password():
-            confirm = form.get("confirm", "")
-            if len(pw) < 6:
-                self._html(render_login(
-                    "Password must be at least 6 characters.", setup=True))
-                return
-            if pw != confirm:
-                self._html(render_login("Passwords do not match.", setup=True))
-                return
-            save_password(pw)
-        elif not check_password(pw):
-            self._html(render_login("Incorrect password."))
+        username = form.get("username", "")
+        password = form.get("password", "")
+
+        if not username or not password:
+            self._html(render_login("Username and password are required."))
             return
 
-        with open(UI_PASSWORD_FILE) as f:
-            tok = make_session_token(f.read().strip())
-        self._redirect_with_cookie("/", tok)
+        # Validate against QNAP QTS auth API
+        env = read_env()
+        host = env.get("QNAP_HOST", "localhost")
+        port = env.get("QNAP_PORT", "443")
+        verify_ssl = env.get("QNAP_VERIFY_SSL", "false")
 
-    def _handle_change_pw(self, form: dict[str, str]) -> None:
-        if not check_password(form.get("current", "")):
-            self._html(render_change_pw("Current password is incorrect.", "err"))
-            return
-        new_pw = form.get("password", "")
-        if len(new_pw) < 6:
-            self._html(render_change_pw("Must be at least 6 characters.", "err"))
-            return
-        if new_pw != form.get("confirm", ""):
-            self._html(render_change_pw("Passwords do not match.", "err"))
-            return
-        save_password(new_pw)
-        with open(UI_PASSWORD_FILE) as f:
-            tok = make_session_token(f.read().strip())
-        self._redirect_with_cookie("/", tok)
+        ok, msg = test_qnap({
+            "QNAP_HOST": host,
+            "QNAP_PORT": port,
+            "QNAP_USERNAME": username,
+            "QNAP_PASSWORD": password,
+            "QNAP_VERIFY_SSL": verify_ssl,
+        })
 
-    def _redirect_with_cookie(self, location: str, session_token: str) -> None:
+        if not ok:
+            # If no config exists yet, try localhost directly
+            if not env.get("QNAP_HOST"):
+                ok, msg = test_qnap({
+                    "QNAP_HOST": "localhost",
+                    "QNAP_PORT": "443",
+                    "QNAP_USERNAME": username,
+                    "QNAP_PASSWORD": password,
+                    "QNAP_VERIFY_SSL": "false",
+                })
+
+        if not ok:
+            self._html(render_login(
+                "Login failed — check your QNAP credentials."))
+            return
+
+        token, login_time = create_session(username)
+        store_session(token, username, login_time)
+        self.send_response(302)
+        self.send_header("Location", "/")
+        self.send_header("Set-Cookie", session_cookie(token))
+        self.end_headers()
+
+    def _redirect(self, location: str) -> None:
         self.send_response(302)
         self.send_header("Location", location)
-        self.send_header(
-            "Set-Cookie",
-            f"mcp_qvs_session={session_token}; Path=/; HttpOnly; SameSite=Strict",
-        )
         self.end_headers()
 
     def _form(self) -> dict[str, str]:

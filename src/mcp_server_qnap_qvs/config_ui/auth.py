@@ -1,66 +1,74 @@
-"""Password hashing, session management, and authentication."""
+"""Authentication using QNAP QTS credentials.
+
+Sessions are cookie-based with a configurable timeout (default 30 minutes,
+matching QNAP's default session timeout).
+"""
 
 from __future__ import annotations
 
 import hashlib
 import http.cookies
-import os
-import secrets
+import time
 
-from .constants import SESSION_SECRET, UI_PASSWORD_FILE
-
-
-def hash_password(pw: str) -> str:
-    salt = secrets.token_hex(16)
-    h = hashlib.sha256(f"{salt}:{pw}".encode()).hexdigest()
-    return f"{salt}:{h}"
+from .constants import SESSION_SECRET, SESSION_TIMEOUT
 
 
-def verify_password(pw: str, stored: str) -> bool:
-    if ":" not in stored:
-        return False
-    salt, expected = stored.split(":", 1)
-    return hashlib.sha256(f"{salt}:{pw}".encode()).hexdigest() == expected
+def _make_token(username: str, login_time: float) -> str:
+    """Create a session token from username + login time + secret."""
+    raw = f"{SESSION_SECRET}:{username}:{login_time}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-def has_password() -> bool:
-    return os.path.exists(UI_PASSWORD_FILE)
+def create_session(username: str) -> tuple[str, float]:
+    """Create a new session. Returns (token, login_time)."""
+    login_time = time.time()
+    token = _make_token(username, login_time)
+    return token, login_time
 
 
-def save_password(pw: str) -> None:
-    with open(UI_PASSWORD_FILE, "w") as f:
-        f.write(hash_password(pw))
+# In-memory session store: token -> (username, login_time)
+_sessions: dict[str, tuple[str, float]] = {}
 
 
-def check_password(pw: str) -> bool:
-    try:
-        with open(UI_PASSWORD_FILE) as f:
-            return verify_password(pw, f.read().strip())
-    except FileNotFoundError:
-        return False
+def store_session(token: str, username: str, login_time: float) -> None:
+    _sessions[token] = (username, login_time)
 
 
-def make_session_token(pw_hash: str) -> str:
-    return hashlib.sha256(f"{SESSION_SECRET}:{pw_hash}".encode()).hexdigest()[:32]
-
-
-def valid_session(cookie_header: str) -> bool:
-    if not has_password():
-        return True
+def get_session(cookie_header: str) -> str | None:
+    """Return the username if the session is valid, None otherwise."""
     try:
         c = http.cookies.SimpleCookie(cookie_header)
         tok = c.get("mcp_qvs_session")
         if not tok:
-            return False
-        with open(UI_PASSWORD_FILE) as f:
-            return tok.value == make_session_token(f.read().strip())
+            return None
+        session = _sessions.get(tok.value)
+        if not session:
+            return None
+        username, login_time = session
+        if time.time() - login_time > SESSION_TIMEOUT:
+            del _sessions[tok.value]
+            return None
+        return username
     except Exception:
-        return False
-
-
-def get_session_cookie(pw: str) -> str | None:
-    """Verify password and return session cookie value, or None."""
-    if not check_password(pw):
         return None
-    with open(UI_PASSWORD_FILE) as f:
-        return make_session_token(f.read().strip())
+
+
+def clear_session(cookie_header: str) -> None:
+    """Remove the session."""
+    try:
+        c = http.cookies.SimpleCookie(cookie_header)
+        tok = c.get("mcp_qvs_session")
+        if tok and tok.value in _sessions:
+            del _sessions[tok.value]
+    except Exception:
+        pass
+
+
+def session_cookie(token: str) -> str:
+    """Build the Set-Cookie header value."""
+    return f"mcp_qvs_session={token}; Path=/; HttpOnly; SameSite=Strict"
+
+
+def clear_cookie() -> str:
+    """Build a Set-Cookie that clears the session."""
+    return "mcp_qvs_session=; Max-Age=0; Path=/; HttpOnly"
