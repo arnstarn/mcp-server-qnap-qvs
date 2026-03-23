@@ -9,7 +9,7 @@ DOCKER="${CS_DIR}/bin/docker"
 COMPOSE="$DOCKER compose"
 COMPOSE_FILE="${QPKG_DIR}/docker-compose.yml"
 ENV_FILE="${QPKG_DIR}/.env"
-PROXY_CONF="/etc/container-proxy.d/${QPKG_NAME}"
+APP_PROXY="/etc/app_proxy.conf"
 PROXY_PATH="/mcp-qvs"
 
 # Read optional Docker registry credentials from .env
@@ -34,24 +34,25 @@ get_image() {
     echo "${REGISTRY:-ghcr.io}/${IMG:-arnstarn/mcp-server-qnap-qvs:latest}"
 }
 
-# Set up HTTPS reverse proxy through QNAP's Apache+stunnel
+# Set up HTTPS reverse proxy via QNAP's apache_proxy
 setup_proxy() {
-    mkdir -p /etc/container-proxy.d
-    cat > "${PROXY_CONF}" << EOF
-ProxyRequests off
-ProxyPass ${PROXY_PATH} http://127.0.0.1:8446
-ProxyPassReverse ${PROXY_PATH} http://127.0.0.1:8446
+    # Write our proxy rules to /etc/app_proxy.conf
+    # (included by both apache-sys-proxy.conf and apache-sys-proxy-ssl.conf)
+    cat > "${APP_PROXY}" << EOF
+ProxyPass ${PROXY_PATH} http://127.0.0.1:8446/ retry=0
+ProxyPassReverse ${PROXY_PATH} http://127.0.0.1:8446/
 EOF
-    /etc/init.d/thttpd.sh reload 2>/dev/null
-    /etc/init.d/stunnel.sh reload 2>/dev/null
-    echo "HTTPS proxy configured: https://$(hostname):443${PROXY_PATH}/"
+    # Graceful reload of the proxy Apache processes
+    /usr/local/apache/bin/apache_proxy -k graceful -f /etc/apache-sys-proxy.conf 2>/dev/null
+    /usr/local/apache/bin/apache_proxys -k graceful -f /etc/apache-sys-proxy-ssl.conf 2>/dev/null
+    echo "HTTPS proxy: https://$(hostname)${PROXY_PATH}/"
 }
 
 # Remove HTTPS reverse proxy
 remove_proxy() {
-    rm -f "${PROXY_CONF}"
-    /etc/init.d/thttpd.sh reload 2>/dev/null
-    /etc/init.d/stunnel.sh reload 2>/dev/null
+    > "${APP_PROXY}" 2>/dev/null
+    /usr/local/apache/bin/apache_proxy -k graceful -f /etc/apache-sys-proxy.conf 2>/dev/null
+    /usr/local/apache/bin/apache_proxys -k graceful -f /etc/apache-sys-proxy-ssl.conf 2>/dev/null
 }
 
 case "$1" in
@@ -79,11 +80,7 @@ case "$1" in
         # Set up HTTPS proxy for config UI
         setup_proxy
 
-        # Ensure App Center uses HTTPS proxy path
-        /sbin/setcfg $QPKG_NAME WebUI "${PROXY_PATH}/" -f $CONF
-        /sbin/setcfg $QPKG_NAME Proxy_Path "${PROXY_PATH}" -f $CONF
-
-        # Sync QPKG version in App Center with the running container version
+        # Sync QPKG version in App Center
         NEW_VER=$($DOCKER exec $QPKG_NAME python3 -c "from mcp_server_qnap_qvs import __version__; print(__version__)" 2>/dev/null)
         if [ -n "$NEW_VER" ]; then
             CUR_VER=$(getcfg $QPKG_NAME Version -f $CONF)

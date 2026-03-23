@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <plugins>
-  <cachechk>20260323110000</cachechk>
+  <cachechk>20260323120000</cachechk>
   <item>
     <name>MCP QVS Server</name>
     <internalName>mcp-server-qnap-qvs</internalName>
@@ -12,26 +12,26 @@
     <developer>arnstarn</developer>
     <developerLink>https://github.com/arnstarn/mcp-server-qnap-qvs</developerLink>
     <fwVersion>5.1.0</fwVersion>
-    <version>0.6.1</version>
+    <version>0.7.0</version>
     <platform>
       <platformID>TS-NASX86</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.6.1/mcp-server-qnap-qvs_0.6.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.7.0/mcp-server-qnap-qvs_0.7.0.qpkg</location>
     </platform>
     <platform>
       <platformID>TS-X73</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.6.1/mcp-server-qnap-qvs_0.6.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.7.0/mcp-server-qnap-qvs_0.7.0.qpkg</location>
     </platform>
     <platform>
       <platformID>TS-X79</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.6.1/mcp-server-qnap-qvs_0.6.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.7.0/mcp-server-qnap-qvs_0.7.0.qpkg</location>
     </platform>
     <platform>
       <platformID>TS-X70</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.6.1/mcp-server-qnap-qvs_0.6.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.7.0/mcp-server-qnap-qvs_0.7.0.qpkg</location>
     </platform>
     <platform>
       <platformID>OLD_X86</platformID>
-      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.6.1/mcp-server-qnap-qvs_0.6.1.qpkg</location>
+      <location>https://github.com/arnstarn/mcp-server-qnap-qvs/releases/download/v0.7.0/mcp-server-qnap-qvs_0.7.0.qpkg</location>
     </platform>
   </item>
 </plugins>
