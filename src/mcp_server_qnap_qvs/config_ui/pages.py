@@ -180,11 +180,45 @@ Only needed if image pulls hit rate limits</span></summary>
 <div class="card" style="margin-top:16px">
 <h2>MCP Client Configuration</h2>
 <p class="hint" style="margin-bottom:8px">
-Add this to <code>~/.claude.json</code> or your MCP client config:</p>
+Connect any MCP-compatible client using the settings below.</p>
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">SSE Endpoint:</strong>
+<code id="sseEndpoint" style="font-size:11px"></code>
+<button type="button" class="btn btn-sm"
+onclick="navigator.clipboard.writeText(document.getElementById('sseEndpoint').textContent)">
+Copy</button>
+</div>
+<div style="margin-bottom:16px">
+<strong style="font-size:12px">Auth Token:</strong>
+<code id="authTokenDisplay" style="font-size:11px"></code>
+<button type="button" class="btn btn-sm"
+onclick="navigator.clipboard.writeText(document.getElementById('authTokenDisplay').textContent)">
+Copy</button>
+</div>
+<details open style="margin-bottom:12px">
+<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
+Claude Code <span class="hint">(~/.claude.json)</span></summary>
 <div class="copy-block">
-<button type="button" class="btn btn-sm" onclick="copyConfig()">Copy</button>
-<div class="mono" id="clientConfig"></div></div></div>
-<div class="card"><h2>Account &amp; Help</h2>
+<button type="button" class="btn btn-sm" onclick="copyEl('cfgClaude')">Copy</button>
+<div class="mono" id="cfgClaude"></div></div></details>
+<details style="margin-bottom:12px">
+<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
+Claude Desktop <span class="hint">(claude_desktop_config.json)</span></summary>
+<div class="copy-block">
+<button type="button" class="btn btn-sm" onclick="copyEl('cfgDesktop')">Copy</button>
+<div class="mono" id="cfgDesktop"></div></div></details>
+<details style="margin-bottom:12px">
+<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
+VS Code / Cursor <span class="hint">(.vscode/mcp.json)</span></summary>
+<div class="copy-block">
+<button type="button" class="btn btn-sm" onclick="copyEl('cfgVscode')">Copy</button>
+<div class="mono" id="cfgVscode"></div></div></details>
+<details style="margin-bottom:12px">
+<summary style="cursor:pointer;font-weight:600;font-size:13px;margin-bottom:8px">
+Other MCP Clients</summary>
+<div class="mono" id="cfgOther"></div></details>
+</div>
+<div class="card"><h2>Help</h2>
 <p style="display:flex;gap:16px;flex-wrap:wrap">
 <a href="/logout" style="color:#58a6ff">Logout</a>
 <a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
@@ -202,15 +236,23 @@ a.forEach(function(b){{t+=c[b%c.length]}});
 document.getElementById('field_MCP_AUTH_TOKEN').value=t;updateCC()}}
 function copyToken(){{var f=document.getElementById('field_MCP_AUTH_TOKEN');
 navigator.clipboard.writeText(f.value).then(function(){{f.select()}})}}
-function copyConfig(){{
-navigator.clipboard.writeText(document.getElementById('clientConfig').textContent)}}
+function copyEl(id){{navigator.clipboard.writeText(document.getElementById(id).textContent)}}
 function updateCC(){{
 var t=document.getElementById('field_MCP_AUTH_TOKEN').value||'your-token';
 var h=window.location.hostname;
-var c=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
-url:"http://"+h+":{MCP_PORT}/sse",
-headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
-document.getElementById('clientConfig').textContent=c}}
+var url="http://"+h+":{MCP_PORT}/sse";
+document.getElementById('sseEndpoint').textContent=url;
+document.getElementById('authTokenDisplay').textContent=t;
+var claude=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
+url:url,headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
+document.getElementById('cfgClaude').textContent=claude;
+document.getElementById('cfgDesktop').textContent=claude;
+var vscode=JSON.stringify({{servers:{{"qnap-qvs":{{
+url:url,headers:{{Authorization:"Bearer "+t}}}}}}}},null,2);
+document.getElementById('cfgVscode').textContent=vscode;
+document.getElementById('cfgOther').textContent=
+"Endpoint: "+url+"\\nTransport: SSE (Server-Sent Events)\\n"+
+"Auth Header: Authorization: Bearer "+t}}
 function testConnection(){{
 var r=document.getElementById('testResult');
 r.innerHTML='<div class="msg msg-info">Testing connection...</div>';
