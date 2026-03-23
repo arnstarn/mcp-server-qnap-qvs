@@ -259,11 +259,35 @@ onclick="navigator.clipboard.writeText(document.getElementById('authTokenReal').
 Copy</button>
 <input type="hidden" id="authTokenReal">
 </div>
+<p class="hint" style="margin-bottom:8px" id="protocolNote"></p>
 <div style="margin-bottom:12px">
 <button type="button" class="btn" id="revealBtn" onclick="toggleAllConfigs()">
 Reveal All Configs</button>
 </div>
 <div id="configBlocks" style="display:none">
+<div style="margin-bottom:16px" id="sslConfigsSection">
+<h2 style="color:#58a6ff;font-size:14px;margin-bottom:8px">HTTPS (Recommended)</h2>
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">Claude Code</strong>
+<span class="hint">(~/.claude.json)</span>
+<button type="button" class="btn btn-sm" style="float:right"
+onclick="copyEl('cfgClaudeSSL')">Copy</button>
+<div class="mono" id="cfgClaudeSSL" style="margin-top:4px"></div></div>
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">Claude Desktop</strong>
+<span class="hint">(claude_desktop_config.json — requires Node.js)</span>
+<button type="button" class="btn btn-sm" style="float:right"
+onclick="copyEl('cfgDesktopSSL')">Copy</button>
+<div class="mono" id="cfgDesktopSSL" style="margin-top:4px"></div></div>
+<div style="margin-bottom:12px">
+<strong style="font-size:12px">VS Code / Cursor</strong>
+<span class="hint">(.vscode/mcp.json)</span>
+<button type="button" class="btn btn-sm" style="float:right"
+onclick="copyEl('cfgVscodeSSL')">Copy</button>
+<div class="mono" id="cfgVscodeSSL" style="margin-top:4px"></div></div>
+</div>
+<div style="margin-bottom:16px">
+<h2 style="color:#8b949e;font-size:14px;margin-bottom:8px">HTTP (Fallback)</h2>
 <div style="margin-bottom:12px">
 <strong style="font-size:12px">Claude Code</strong>
 <span class="hint">(~/.claude.json)</span>
@@ -282,6 +306,7 @@ onclick="copyEl('cfgDesktop')">Copy</button>
 <button type="button" class="btn btn-sm" style="float:right"
 onclick="copyEl('cfgVscode')">Copy</button>
 <div class="mono" id="cfgVscode" style="margin-top:4px"></div></div>
+</div>
 <div style="margin-bottom:12px">
 <strong style="font-size:12px">Other MCP Clients</strong>
 <div class="mono" id="cfgOther" style="margin-top:4px"></div></div>
@@ -325,27 +350,44 @@ var t=document.getElementById('field_MCP_AUTH_TOKEN').value||'your-token';
 var h=window.location.hostname;
 var httpUrl="http://"+h+":{MCP_PORT}/sse";
 var httpsUrl="https://"+h+":{MCP_SSL_PORT}/sse";
-var url=_hasSSL?httpsUrl:httpUrl;
 document.getElementById('sseEndpoint').textContent=httpUrl;
 if(_hasSSL){{document.getElementById('sslEndpoint').textContent=httpsUrl}}
-else{{document.getElementById('sslEndpointRow').style.display='none'}}
+else{{
+document.getElementById('sslEndpointRow').style.display='none';
+document.getElementById('sslConfigsSection').style.display='none';
+}}
 document.getElementById('authTokenReal').value=t;
 if(!_configsVisible)document.getElementById('authTokenDisplay').textContent='••••••••';
+// HTTP configs
 var claude=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
-url:url,headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
+url:httpUrl,headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
 document.getElementById('cfgClaude').textContent=claude;
 var desktop=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
 command:"npx",args:["-y","@anthropic-ai/mcp-proxy",
-"--header","Authorization: Bearer "+t,url]}}}}}},null,2);
+"--header","Authorization: Bearer "+t,httpUrl]}}}}}},null,2);
 document.getElementById('cfgDesktop').textContent=desktop;
 var vscode=JSON.stringify({{servers:{{"qnap-qvs":{{
-url:url,headers:{{Authorization:"Bearer "+t}}}}}}}},null,2);
+url:httpUrl,headers:{{Authorization:"Bearer "+t}}}}}}}},null,2);
 document.getElementById('cfgVscode').textContent=vscode;
-var endpoints=_hasSSL?("HTTPS Endpoint: "+httpsUrl+"\\nHTTP Endpoint: "+httpUrl):
-("HTTP Endpoint: "+httpUrl);
+// HTTPS configs
+if(_hasSSL){{
+var claudeSSL=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
+url:httpsUrl,headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
+document.getElementById('cfgClaudeSSL').textContent=claudeSSL;
+var desktopSSL=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
+command:"npx",args:["-y","@anthropic-ai/mcp-proxy",
+"--header","Authorization: Bearer "+t,httpsUrl]}}}}}},null,2);
+document.getElementById('cfgDesktopSSL').textContent=desktopSSL;
+var vscodeSSL=JSON.stringify({{servers:{{"qnap-qvs":{{
+url:httpsUrl,headers:{{Authorization:"Bearer "+t}}}}}}}},null,2);
+document.getElementById('cfgVscodeSSL').textContent=vscodeSSL;
+}}
+document.getElementById('protocolNote').textContent=_hasSSL?
+'HTTPS is recommended for encrypted connections. Use HTTP if your client does not support self-signed certificates.':
+'HTTP only — mount a TLS certificate to enable HTTPS.';
+var endpoints=_hasSSL?("HTTPS: "+httpsUrl+"\\nHTTP: "+httpUrl):("HTTP: "+httpUrl);
 document.getElementById('cfgOther').textContent=
-endpoints+"\\nTransport: SSE (Server-Sent Events)\\n"+
-"Auth Header: Authorization: Bearer "+t}}
+endpoints+"\\nTransport: SSE\\nAuth: Authorization: Bearer "+t}}
 function testConnection(){{
 var r=document.getElementById('testResult');
 r.innerHTML='<div class="msg msg-info">Testing connection...</div>';
