@@ -39,6 +39,7 @@ Repository = "https://github.com/arnstarn/mcp-server-qnap-qvs"
 [project.scripts]
 mcp-server-qnap-qvs = "mcp_server_qnap_qvs.server:main"
 mcp-qvs-config-ui = "mcp_server_qnap_qvs.config_ui:main"
+# Legacy single-file entry point removed — now uses config_ui package
 
 [tool.ruff]
 target-version = "py310"

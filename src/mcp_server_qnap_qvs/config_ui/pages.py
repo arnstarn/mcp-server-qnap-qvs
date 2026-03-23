@@ -1,0 +1,423 @@
+"""Page renderers for the config UI."""
+
+from __future__ import annotations
+
+import html
+
+from .constants import FIELDS, MCP_PORT, VERSION
+from .helpers import check_port, read_env, read_log, test_qnap, uptime
+from .styles import CSS
+
+
+def _nav(active: str) -> str:
+    items = [
+        ("Dashboard", "/"), ("Settings", "/settings"),
+        ("Logs", "/logs"), ("Change Password", "/change-password"),
+    ]
+    links = ""
+    for label, href in items:
+        cls = ' class="active"' if active == label else ""
+        links += f'<a href="{href}"{cls}>{label}</a>'
+    return f"""<div class="nav">{links}<div class="spacer"></div>
+<span class="ver">v{VERSION}</span>
+<a href="/logout">Logout</a></div>"""
+
+
+def _page(title: str, nav_active: str, body: str) -> str:
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP QVS — {title}</title>
+<style>{CSS}</style></head>
+<body>{_nav(nav_active)}
+<div class="container">{body}</div>
+<div class="footer">
+<a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
+target="_blank">mcp-server-qnap-qvs</a> v{VERSION}
+</div></body></html>"""
+
+
+def render_dashboard() -> str:
+    env = read_env()
+    mcp_up = check_port()
+    qnap_ok, qnap_msg = (False, "Not configured")
+    if env.get("QNAP_HOST") and env.get("QNAP_USERNAME"):
+        qnap_ok, qnap_msg = test_qnap(env)
+
+    mcp_dot = "dot-green" if mcp_up else "dot-red"
+    mcp_lbl = "Running" if mcp_up else "Stopped"
+    qnap_dot = "dot-green" if qnap_ok else "dot-red"
+    has_token = bool(env.get("MCP_AUTH_TOKEN"))
+    tok_dot = "dot-green" if has_token else "dot-yellow"
+    tok_lbl = "Configured" if has_token else "Not set"
+    host = html.escape(env.get("QNAP_HOST", "—"))
+    user = html.escape(env.get("QNAP_USERNAME", "—"))
+
+    body = f"""
+<h1>Dashboard</h1>
+<p class="subtitle">MCP QVS Server Status</p>
+<div class="grid">
+<div class="card stat">
+    <div><span class="dot {mcp_dot}"></span>{mcp_lbl}</div>
+    <div class="lbl">MCP Server (port {MCP_PORT})</div>
+</div>
+<div class="card stat">
+    <div><span class="dot {qnap_dot}"></span>{html.escape(qnap_msg[:40])}</div>
+    <div class="lbl">QNAP QVS API</div>
+</div>
+<div class="card stat">
+    <div><span class="dot {tok_dot}"></span>{tok_lbl}</div>
+    <div class="lbl">MCP Auth Token</div>
+</div>
+<div class="card stat">
+    <div class="num">{uptime()}</div>
+    <div class="lbl">Uptime</div>
+</div>
+</div>
+<div class="card">
+<h2>Current Configuration</h2>
+<table class="tbl">
+<tr><td>QNAP Host</td><td>{host}</td></tr>
+<tr><td>Username</td><td>{user}</td></tr>
+<tr><td>Password</td><td class="masked">{"set" if env.get("QNAP_PASSWORD") else "not set"}</td></tr>
+<tr><td>Auth Token</td><td class="masked">{"set" if has_token else "not set"}</td></tr>
+<tr><td>SSL Verify</td><td>{env.get("QNAP_VERIFY_SSL", "false")}</td></tr>
+<tr><td>Version</td><td>{VERSION}</td></tr>
+</table>
+<div class="actions">
+<a href="/settings" class="btn btn-primary">Edit Settings</a>
+</div></div>"""
+    return _page("Dashboard", "Dashboard", body)
+
+
+def render_settings(values: dict[str, str], msg: str = "", mt: str = "info") -> str:
+    has_cfg = bool(values.get("QNAP_USERNAME") and values.get("QNAP_PASSWORD"))
+    rows = ""
+    for key, label, default, hint_text in FIELDS:
+        val = html.escape(values.get(key, default))
+        extra = ""
+        if key == "MCP_AUTH_TOKEN":
+            extra = (
+                '<button type="button" class="btn btn-sm" '
+                'onclick="generateToken()">Generate</button>'
+                '<button type="button" class="btn btn-sm" '
+                'onclick="copyToken()">Copy</button>'
+            )
+        if "PASSWORD" in key or key == "MCP_AUTH_TOKEN":
+            sid = f"show_{key}"
+            inp = (
+                f'<input type="password" name="{key}" value="{val}" '
+                f'class="input" id="field_{key}">'
+                f'<button type="button" class="btn btn-sm" id="{sid}" '
+                f"onclick=\"toggleVis('{key}','{sid}')\">Show</button>"
+            )
+        elif key == "QNAP_VERIFY_SSL":
+            sf = "selected" if val != "true" else ""
+            st = "selected" if val == "true" else ""
+            inp = (
+                f'<select name="{key}" class="input">'
+                f'<option value="false" {sf}>false (self-signed, typical)</option>'
+                f'<option value="true" {st}>true (valid TLS cert)</option>'
+                "</select>"
+            )
+        else:
+            inp = (
+                f'<input type="text" name="{key}" value="{val}" '
+                f'class="input" id="field_{key}">'
+            )
+        rows += f"""<div class="field"><label>{html.escape(label)}</label>
+<div class="input-row">{inp}{extra}</div>
+<div class="hint">{html.escape(hint_text)}</div></div>"""
+
+    msg_html = ""
+    if msg:
+        msg_html = f'<div class="msg msg-{mt}">{html.escape(msg)}</div>'
+    elif has_cfg:
+        msg_html = ('<div class="msg msg-ok">Configuration loaded. '
+                    "Update fields and Save, or Reset to start fresh.</div>")
+
+    reset = '<a href="/reset" class="btn btn-danger">Reset</a>' if has_cfg else ""
+    test_btn = ('<button type="button" class="btn" '
+                'onclick="testConnection()">Test Connection</button>')
+
+    body = f"""
+<h1>Settings</h1>
+<p class="subtitle">QNAP credentials and MCP auth token</p>
+{msg_html}
+<div id="testResult"></div>
+<form method="POST" action="/validate">
+<div class="card"><h2>QNAP Connection</h2>{rows}</div>
+<div class="actions">{reset}{test_btn}
+<button type="submit" class="btn btn-primary">Save</button>
+</div></form>
+<div class="card" style="margin-top:16px">
+<h2>MCP Client Configuration</h2>
+<p class="hint" style="margin-bottom:8px">
+Add this to <code>~/.claude.json</code> or your MCP client config:</p>
+<div class="copy-block">
+<button type="button" class="btn btn-sm" onclick="copyConfig()">Copy</button>
+<div class="mono" id="clientConfig"></div></div></div>
+<div class="card"><h2>Account &amp; Help</h2>
+<p style="display:flex;gap:16px;flex-wrap:wrap">
+<a href="/change-password" style="color:#58a6ff">Change Password</a>
+<a href="/logout" style="color:#58a6ff">Logout</a>
+<a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
+style="color:#58a6ff" target="_blank">GitHub</a></p>
+<p class="hint" style="margin-top:8px;color:#6e7681;font-size:10px">
+Forgot your password? SSH into the NAS and delete the password file.</p></div>
+<script>
+function toggleVis(fid,bid){{
+var f=document.getElementById('field_'+fid),b=document.getElementById(bid);
+if(f.type==='password'){{f.type='text';b.textContent='Hide'}}
+else{{f.type='password';b.textContent='Show'}}}}
+function generateToken(){{
+var c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',t='';
+var a=new Uint8Array(48);crypto.getRandomValues(a);
+a.forEach(function(b){{t+=c[b%c.length]}});
+document.getElementById('field_MCP_AUTH_TOKEN').value=t;updateCC()}}
+function copyToken(){{var f=document.getElementById('field_MCP_AUTH_TOKEN');
+navigator.clipboard.writeText(f.value).then(function(){{f.select()}})}}
+function copyConfig(){{
+navigator.clipboard.writeText(document.getElementById('clientConfig').textContent)}}
+function updateCC(){{
+var t=document.getElementById('field_MCP_AUTH_TOKEN').value||'your-token';
+var h=window.location.hostname;
+var c=JSON.stringify({{mcpServers:{{"qnap-qvs":{{
+url:"http://"+h+":{MCP_PORT}/sse",
+headers:{{Authorization:"Bearer "+t}},transportType:"sse"}}}}}},null,2);
+document.getElementById('clientConfig').textContent=c}}
+function testConnection(){{
+var r=document.getElementById('testResult');
+r.innerHTML='<div class="msg msg-info">Testing connection...</div>';
+var fd=new FormData(document.querySelector('form'));
+var p=new URLSearchParams(fd).toString();
+fetch('/api/test-connection',{{method:'POST',
+headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:p}})
+.then(function(x){{return x.json()}}).then(function(d){{
+var cls=d.ok?'msg-ok':'msg-err';
+r.innerHTML='<div class="msg '+cls+'">'+d.message+'</div>'}})
+.catch(function(e){{r.innerHTML='<div class="msg msg-err">'+e+'</div>'}})}}
+document.querySelectorAll('input').forEach(function(e){{
+e.addEventListener('input',updateCC)}});
+(function(){{var f=document.getElementById('field_QNAP_HOST');
+if(f&&(!f.value||f.value==='localhost')){{var h=window.location.hostname;
+if(h&&h!=='localhost'&&h!=='127.0.0.1')f.value=h;}}
+}})();updateCC();
+</script>"""
+    return _page("Settings", "Settings", body)
+
+
+def render_review(values: dict[str, str], ok: bool, msg: str) -> str:
+    rows = ""
+    for key, label, default, _ in FIELDS:
+        val = values.get(key, default)
+        is_secret = "PASSWORD" in key or key == "MCP_AUTH_TOKEN"
+        disp = "set" if is_secret else html.escape(val)
+        css = ' class="masked"' if is_secret else ""
+        rows += f"<tr><td>{html.escape(label)}</td><td{css}>{disp}</td></tr>"
+
+    if ok:
+        hidden = "".join(
+            f'<input type="hidden" name="{k}" value="{html.escape(v)}">'
+            for k, v in values.items()
+        )
+        buttons = f"""<div class="actions">
+<a href="/settings" class="btn">Edit</a>
+<form method="POST" action="/confirm" style="display:inline">
+{hidden}
+<button type="submit" class="btn btn-primary">Confirm &amp; Restart</button>
+</form></div>"""
+        mc = "msg-ok"
+    else:
+        buttons = ('<div class="actions">'
+                   '<a href="/settings" class="btn btn-primary">Go Back</a></div>')
+        mc = "msg-err"
+
+    body = f"""
+<h1>Review Settings</h1>
+<div class="msg {mc}">{html.escape(msg)}</div>
+<div class="card"><h2>Summary</h2>
+<table class="tbl">{rows}</table></div>{buttons}"""
+    return _page("Review", "Settings", body)
+
+
+def render_success(values: dict[str, str]) -> str:
+    token = html.escape(values.get("MCP_AUTH_TOKEN", ""))
+    body = f"""
+<h1>Setup Complete</h1>
+<div class="msg msg-ok">Settings saved. The MCP server is restarting.</div>
+<div class="card"><h2>What's Next</h2>
+<div class="step"><div class="step-n">1</div>
+<div class="step-t">The MCP server will be ready in a few seconds on port
+<strong>{MCP_PORT}</strong>.</div></div>
+<div class="step"><div class="step-n">2</div>
+<div class="step-t">Copy the client configuration below.</div></div></div>
+<div class="card"><h2>MCP Client Configuration</h2>
+<div class="copy-block">
+<button type="button" class="btn btn-sm" onclick="copyConfig()">Copy</button>
+<div class="mono" id="clientConfig"></div></div></div>
+<script>
+function copyConfig(){{
+navigator.clipboard.writeText(document.getElementById('clientConfig').textContent)}}
+var h=window.location.hostname;
+document.getElementById('clientConfig').textContent=JSON.stringify({{
+mcpServers:{{"qnap-qvs":{{url:"http://"+h+":{MCP_PORT}/sse",
+headers:{{Authorization:"Bearer {token}"}},transportType:"sse"}}}}}},null,2);
+</script>"""
+    return _page("Complete", "Settings", body)
+
+
+def render_logs() -> str:
+    log = html.escape(read_log(200))
+    body = f"""
+<h1>Server Logs</h1>
+<p class="subtitle">Last 200 lines from the MCP server</p>
+<div class="actions" style="margin-bottom:12px">
+<button class="btn btn-sm" onclick="location.reload()">Refresh</button></div>
+<pre class="log">{log}</pre>"""
+    return _page("Logs", "Logs", body)
+
+
+def render_login(msg: str = "", setup: bool = False) -> str:
+    title = "Set Config UI Password" if setup else "Login"
+    btn = "Set Password" if setup else "Login"
+    info = ("Choose a password to protect this page (min 6 characters)."
+            if setup else "Enter your config UI password.")
+    extra = ""
+    if setup:
+        extra = """<div class="field"><label>Confirm Password</label>
+<input type="password" name="confirm" class="input" required
+placeholder="Confirm password"></div>"""
+    msg_html = (f'<div class="msg msg-err">{html.escape(msg)}</div>'
+                if msg else "")
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP QVS — {title}</title><style>{CSS}</style></head>
+<body><div class="container" style="max-width:400px;margin-top:60px">
+<h1 style="text-align:center">MCP QVS Server</h1>
+<p class="subtitle" style="text-align:center">{title}</p>
+{msg_html}
+<div class="card"><p class="hint" style="margin-bottom:12px">{info}</p>
+<form method="POST" action="/login">
+<div class="field"><label>Password</label>
+<input type="password" name="password" class="input" required autofocus></div>
+{extra}
+<div class="actions">
+<button type="submit" class="btn btn-primary">{btn}</button></div>
+</form></div>
+<div class="footer">
+<a href="https://github.com/arnstarn/mcp-server-qnap-qvs"
+target="_blank">mcp-server-qnap-qvs</a> v{VERSION}</div>
+</div></body></html>"""
+
+
+def render_change_pw(msg: str = "", mt: str = "info") -> str:
+    msg_html = (f'<div class="msg msg-{mt}">{html.escape(msg)}</div>'
+                if msg else "")
+    body = f"""
+<h1>Change Password</h1>
+{msg_html}
+<div class="card">
+<form method="POST" action="/change-password">
+<div class="field"><label>Current Password</label>
+<input type="password" name="current" class="input" required></div>
+<div class="field"><label>New Password</label>
+<input type="password" name="password" class="input" required
+placeholder="Min 6 characters"></div>
+<div class="field"><label>Confirm New Password</label>
+<input type="password" name="confirm" class="input" required></div>
+<div class="actions"><a href="/" class="btn">Cancel</a>
+<button type="submit" class="btn btn-primary">Change Password</button>
+</div></form></div>
+<p class="hint" style="margin-top:12px">
+Forgot your password? SSH into the NAS and delete the password file.</p>"""
+    return _page("Change Password", "Change Password", body)
+
+
+def render_wizard(step: int = 1, values: dict | None = None,
+                  msg: str = "", mt: str = "info") -> str:
+    values = values or {}
+    msg_html = (f'<div class="msg msg-{mt}">{html.escape(msg)}</div>'
+                if msg else "")
+
+    steps_bar = f"""
+<div style="display:flex;gap:8px;margin-bottom:16px">
+<div class="step-n" style="background:{'#238636' if step>=1 else '#30363d'}">1</div>
+<div style="flex:1;height:2px;background:{'#238636' if step>=2 else '#30363d'};
+align-self:center"></div>
+<div class="step-n" style="background:{'#238636' if step>=2 else '#30363d'}">2</div>
+</div>"""
+
+    if step == 1:
+        hv = html.escape(values.get("QNAP_HOST", ""))
+        pv = html.escape(values.get("QNAP_PORT", "443"))
+        uv = html.escape(values.get("QNAP_USERNAME", ""))
+        pwv = html.escape(values.get("QNAP_PASSWORD", ""))
+        sv = values.get("QNAP_VERIFY_SSL", "false")
+        sf = "selected" if sv != "true" else ""
+        st = "selected" if sv == "true" else ""
+        content = f"""{msg_html}
+<div class="card"><h2>Step 1: QNAP Connection</h2>
+<p class="hint" style="margin-bottom:12px">Enter the credentials you use
+to log into the QNAP web UI.</p>
+<form method="POST" action="/wizard/1">
+<div class="field"><label>QNAP Host</label>
+<input type="text" name="QNAP_HOST" value="{hv}" class="input"
+id="field_QNAP_HOST" placeholder="e.g. 192.168.1.100"></div>
+<div class="field"><label>HTTPS Port</label>
+<input type="text" name="QNAP_PORT" value="{pv}" class="input"></div>
+<div class="field"><label>Username</label>
+<input type="text" name="QNAP_USERNAME" value="{uv}" class="input"></div>
+<div class="field"><label>Password</label>
+<input type="password" name="QNAP_PASSWORD" value="{pwv}" class="input"></div>
+<div class="field"><label>Verify SSL</label>
+<select name="QNAP_VERIFY_SSL" class="input">
+<option value="false" {sf}>false (self-signed, typical)</option>
+<option value="true" {st}>true</option></select></div>
+<div class="actions">
+<button type="submit" class="btn btn-primary">Test &amp; Continue</button>
+</div></form></div>
+<script>(function(){{var f=document.getElementById('field_QNAP_HOST');
+if(f&&!f.value){{var h=window.location.hostname;
+if(h&&h!=='localhost'&&h!=='127.0.0.1')f.value=h;}}}})();</script>"""
+    elif step == 2:
+        tv = html.escape(values.get("MCP_AUTH_TOKEN", ""))
+        hidden = "".join(
+            f'<input type="hidden" name="{k}" value="{html.escape(v)}">'
+            for k, v in values.items() if k != "MCP_AUTH_TOKEN"
+        )
+        content = f"""{msg_html}
+<div class="card"><h2>Step 2: MCP Auth Token</h2>
+<p class="hint" style="margin-bottom:12px">
+This token is a shared secret between the server and your AI client.
+Click Generate to create one.</p>
+<form method="POST" action="/wizard/2">{hidden}
+<div class="field"><label>Auth Token</label>
+<div class="input-row">
+<input type="text" name="MCP_AUTH_TOKEN" value="{tv}"
+class="input" id="field_MCP_AUTH_TOKEN">
+<button type="button" class="btn btn-sm"
+onclick="generateToken()">Generate</button>
+<button type="button" class="btn btn-sm"
+onclick="copyToken()">Copy</button></div></div>
+<div class="actions">
+<button type="submit" class="btn btn-primary">Save &amp; Finish</button>
+</div></form></div>
+<script>
+function generateToken(){{
+var c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',t='';
+var a=new Uint8Array(48);crypto.getRandomValues(a);
+a.forEach(function(b){{t+=c[b%c.length]}});
+document.getElementById('field_MCP_AUTH_TOKEN').value=t}}
+function copyToken(){{var f=document.getElementById('field_MCP_AUTH_TOKEN');
+navigator.clipboard.writeText(f.value).then(function(){{f.select()}})}}
+</script>"""
+    else:
+        content = ""
+
+    body = f"""
+<h1>Setup Wizard</h1>
+<p class="subtitle">First-time configuration</p>
+{steps_bar}{content}"""
+    return _page("Setup", "", body)
