@@ -49,7 +49,8 @@ class BearerTokenVerifier:
 
     def log_token(self) -> None:
         if self._generated:
-            logger.info("Generated auth token: Bearer %s", self.token)
+            masked = self.token[:4] + "••••" + self.token[-4:] if len(self.token) > 8 else "••••"
+            logger.info("Generated auth token: %s (view full token in config UI)", masked)
             logger.info("Set MCP_AUTH_TOKEN env var to use a fixed token instead")
         else:
             logger.info("Using auth token from MCP_AUTH_TOKEN env var")

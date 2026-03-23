@@ -4,6 +4,12 @@
 
 LOG_FILE="${LOG_FILE:-/config/mcp-qvs.log}"
 
+# Rotate log on startup — keep last 500 lines, discard old history
+if [ -f "$LOG_FILE" ]; then
+    tail -500 "$LOG_FILE" > "${LOG_FILE}.tmp" 2>/dev/null
+    mv "${LOG_FILE}.tmp" "$LOG_FILE" 2>/dev/null
+fi
+
 # Trap signals to clean up both processes
 cleanup() {
     echo "Shutting down..."
