@@ -79,6 +79,11 @@ case "$1" in
         # Set up HTTPS proxy for config UI
         setup_proxy
 
+        # Ensure App Center uses HTTPS proxy path (not direct HTTP port)
+        /sbin/setcfg $QPKG_NAME WebUI "${PROXY_PATH}/" -f $CONF
+        /sbin/setcfg $QPKG_NAME Web_Port "" -f $CONF
+        /sbin/setcfg $QPKG_NAME Proxy_Path "${PROXY_PATH}" -f $CONF
+
         # Sync QPKG version in App Center with the running container version
         NEW_VER=$($DOCKER exec $QPKG_NAME python3 -c "from mcp_server_qnap_qvs import __version__; print(__version__)" 2>/dev/null)
         if [ -n "$NEW_VER" ]; then
