@@ -3,6 +3,7 @@
 
 CONF=/etc/config/qpkg.conf
 QPKG_NAME="mcp-server-qnap-qvs"
+ENV_BACKUP="/tmp/mcp-qvs-env-backup"
 
 pkg_pre_install() {
     CS_DIR=$(getcfg container-station Install_Path -f $CONF 2>/dev/null)
@@ -16,9 +17,9 @@ pkg_pre_install() {
 pkg_post_install() {
     QPKG_DIR=$(getcfg $QPKG_NAME Install_Path -f $CONF)
 
+    # Don't auto-restore — the config UI wizard will offer the choice
     if [ ! -f "${QPKG_DIR}/.env" ]; then
         cp "${QPKG_DIR}/.env.example" "${QPKG_DIR}/.env"
-        echo "Created ${QPKG_DIR}/.env — please edit with your QNAP credentials."
     fi
 
     chmod +x "${QPKG_DIR}/mcp-server-qnap-qvs.sh"
@@ -30,5 +31,17 @@ pkg_post_install() {
 pkg_pre_remove() {
     QPKG_DIR=$(getcfg $QPKG_NAME Install_Path -f $CONF)
     CS_DIR=$(getcfg container-station Install_Path -f $CONF)
+
+    # Backup .env before removal so reinstall can restore it
+    if [ -f "${QPKG_DIR}/.env" ]; then
+        cp "${QPKG_DIR}/.env" "$ENV_BACKUP"
+        echo "Configuration backed up for reinstall."
+    fi
+
+    # Remove HTTPS proxy
+    rm -f "/etc/container-proxy.d/${QPKG_NAME}"
+    /etc/init.d/thttpd.sh reload 2>/dev/null
+    /etc/init.d/stunnel.sh reload 2>/dev/null
+
     cd "${QPKG_DIR}" && "${CS_DIR}/bin/docker" compose down 2>/dev/null
 }

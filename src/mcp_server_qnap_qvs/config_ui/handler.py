@@ -19,11 +19,20 @@ from .auth import (
     store_session,
 )
 from .constants import ENV_FILE, UI_BASE_PATH, VERSION
-from .helpers import check_latest_version, read_env, test_qnap, write_env
+from .helpers import (
+    check_latest_version,
+    delete_backup,
+    has_backup,
+    read_env,
+    restore_backup,
+    test_qnap,
+    write_env,
+)
 from .pages import (
     render_dashboard,
     render_login,
     render_logs,
+    render_restore_choice,
     render_review,
     render_settings,
     render_success,
@@ -81,9 +90,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if p in ("/", ""):
             if is_first_run:
-                self._html(render_wizard(1, user=user))
+                if has_backup():
+                    self._html(render_restore_choice(user=user))
+                else:
+                    self._html(render_wizard(1, user=user))
             else:
                 self._html(render_dashboard(user=user))
+        elif p == "/restore-backup":
+            if restore_backup():
+                self._redirect(f"{UI_BASE_PATH}/")
+            else:
+                self._html(render_wizard(1, user=user))
+        elif p == "/setup-fresh":
+            delete_backup()
+            self._html(render_wizard(1, user=user))
         elif p == "/settings":
             self._html(render_settings(env, user=user))
         elif p == "/logs":

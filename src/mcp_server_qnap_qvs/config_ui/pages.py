@@ -426,6 +426,23 @@ target="_blank">mcp-server-qnap-qvs</a> v{VERSION}</div>
 </div></body></html>"""
 
 
+def render_restore_choice(user: str = "") -> str:
+    """Render the restore-from-backup choice page."""
+    body = f"""
+<h1>Welcome Back</h1>
+<p class="subtitle">A previous configuration was found.</p>
+<div class="card">
+<h2>Restore or Start Fresh?</h2>
+<p class="hint" style="margin-bottom:16px">
+Your previous QNAP credentials and MCP auth token were saved.
+You can restore them or set up from scratch.</p>
+<div class="actions">
+<a href="{B}/setup-fresh" class="btn">Start Fresh</a>
+<a href="{B}/restore-backup" class="btn btn-primary">Restore Previous Config</a>
+</div></div>"""
+    return _page("Restore", "", body, user)
+
+
 def render_wizard(step: int = 1, values: dict | None = None,
                   msg: str = "", mt: str = "info", user: str = "") -> str:
     values = values or {}

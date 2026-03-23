@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import collections
+import os
+import shutil
 import socket
 import ssl
 import time
@@ -10,6 +12,28 @@ import urllib.parse
 import urllib.request
 
 from .constants import ENV_FILE, FIELDS, LOG_FILE, MCP_PORT, REGISTRY_FIELDS, START_TIME
+
+ENV_BACKUP = "/tmp/mcp-qvs-env-backup"
+
+
+def has_backup() -> bool:
+    return os.path.exists(ENV_BACKUP)
+
+
+def restore_backup() -> bool:
+    """Restore .env from backup. Returns True if successful."""
+    if os.path.exists(ENV_BACKUP):
+        shutil.copy2(ENV_BACKUP, ENV_FILE)
+        return True
+    return False
+
+
+def delete_backup() -> None:
+    """Delete the backup file."""
+    try:
+        os.remove(ENV_BACKUP)
+    except FileNotFoundError:
+        pass
 
 
 def read_env() -> dict[str, str]:

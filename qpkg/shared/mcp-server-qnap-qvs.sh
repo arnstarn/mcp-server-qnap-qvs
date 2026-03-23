@@ -79,9 +79,8 @@ case "$1" in
         # Set up HTTPS proxy for config UI
         setup_proxy
 
-        # Ensure App Center uses HTTPS proxy path (not direct HTTP port)
+        # Ensure App Center uses HTTPS proxy path
         /sbin/setcfg $QPKG_NAME WebUI "${PROXY_PATH}/" -f $CONF
-        /sbin/setcfg $QPKG_NAME Web_Port "" -f $CONF
         /sbin/setcfg $QPKG_NAME Proxy_Path "${PROXY_PATH}" -f $CONF
 
         # Sync QPKG version in App Center with the running container version
