@@ -16,5 +16,5 @@ services:
       - CONFIG_UI_HOST=127.0.0.1
       - CONFIG_UI_BASE_PATH=/mcp-qvs
       - MCP_SSL_CERT=/certs/stunnel.pem
-      - MCP_SSL_PORT=8443
+      - MCP_SSL_PORT=8444
       - ENV_FILE=/config/.env
