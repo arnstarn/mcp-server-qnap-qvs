@@ -81,11 +81,29 @@ def test_qnap(
 
 
 def read_log(lines: int = 200) -> str:
+    """Read last N lines from log file, redacting sensitive values."""
+    import re
     try:
         with open(LOG_FILE) as f:
-            return "\n".join(collections.deque(f, maxlen=lines))
+            raw = "\n".join(collections.deque(f, maxlen=lines))
     except FileNotFoundError:
         return "(No log file found. The MCP server may not have started yet.)"
+
+    # Redact auth tokens and passwords from log output
+    env = read_env()
+    for key in ("MCP_AUTH_TOKEN", "QNAP_PASSWORD"):
+        val = env.get(key, "")
+        if val and len(val) > 4:
+            masked = val[:4] + "••••" + val[-4:]
+            raw = raw.replace(val, masked)
+
+    # Redact any Bearer token patterns
+    raw = re.sub(
+        r"(Bearer\s+)([A-Za-z0-9_\-]{8})[A-Za-z0-9_\-]+([A-Za-z0-9_\-]{4})",
+        r"\1\2••••\3",
+        raw,
+    )
+    return raw
 
 
 def check_latest_version() -> tuple[str, str]:
