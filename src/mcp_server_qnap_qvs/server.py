@@ -1383,7 +1383,7 @@ def main() -> None:
         host = os.environ.get("MCP_HOST", "0.0.0.0")
         port = os.environ.get("MCP_PORT", "8445")
         ssl_cert = os.environ.get("MCP_SSL_CERT", "")
-        ssl_port = os.environ.get("MCP_SSL_PORT", "8443")
+        ssl_port = os.environ.get("MCP_SSL_PORT", "8444")
 
         logger.info("Starting QNAP QVS MCP server (SSE on %s:%s)", host, port)
         if _token_verifier:
